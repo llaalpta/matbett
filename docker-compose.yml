@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # =============================================
+  # PostgreSQL Database
+  # =============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: matbett-postgres
+    restart: unless-stopped
+    environment:
+      # Credenciales de base de datos
+      POSTGRES_USER: matbett_user
+      POSTGRES_PASSWORD: matbett_password_dev
+      POSTGRES_DB: matbett_db
+      # Configuración de timezone
+      TZ: Europe/Madrid
+      PGTZ: Europe/Madrid
+    ports:
+      # Exponer PostgreSQL en puerto 5432
+      - '5432:5432'
+    volumes:
+      # Persistir datos en volumen Docker
+      - postgres_data:/var/lib/postgresql/data
+      # Scripts de inicialización (opcional)
+      - ./apps/backend/docker/init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - matbett-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U matbett_user -d matbett_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================
+  # pgAdmin (opcional - para administración visual)
+  # =============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: matbett-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@matbett.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - '5050:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - matbett-network
+    depends_on:
+      - postgres
+    profiles:
+      # Solo se levanta si ejecutas: docker-compose --profile tools up
+      - tools
+
+# =============================================
+# Volumes para persistencia de datos
+# =============================================
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# =============================================
+# Red interna para comunicación entre servicios
+# =============================================
+networks:
+  matbett-network:
+    driver: bridge

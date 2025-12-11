@@ -1,0 +1,31 @@
+{
+  "name": "matbett",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --stream dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:packages": "pnpm --filter \"@matbett/*\" --parallel dev",
+    "build": "pnpm build:packages && pnpm build:apps",
+    "build:packages": "pnpm --filter \"@matbett/*\" build",
+    "build:apps": "pnpm --filter \"./apps/*\" build",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend build",
+    "clean": "pnpm --recursive clean",
+    "clean:deep": "pnpm --recursive exec rm -rf node_modules dist .next .turbo && rm -rf node_modules",
+    "lint": "pnpm --recursive lint",
+    "format": "pnpm --recursive format",
+    "ts": "pnpm --recursive --parallel ts",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "db:logs": "docker-compose logs -f postgres"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
