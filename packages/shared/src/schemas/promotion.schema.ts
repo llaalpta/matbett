@@ -47,7 +47,7 @@ export const PromotionSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().nullish(),
-  bookmaker: BookmakerSchema.nullish(),
+  bookmaker: BookmakerSchema,
   status: PromotionStatusSchema.optional(),
   phases: z.array(PhaseSchema).min(1),
   timeframe: AbsoluteTimeframeSchema,

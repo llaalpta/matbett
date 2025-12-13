@@ -11,6 +11,7 @@
 import { z } from 'zod';
 
 import { TimeframeSchema } from './timeframe.schema';
+import { requiredNumber } from './utils';
 import {
   OddsRestrictionSchema,
   StakeRestrictionSchema,
@@ -102,8 +103,8 @@ export const BonusNoRolloverUsageConditionsSchema = z.object({
 export const CashbackUsageConditionsSchema = z.object({
   type: z.literal('CASHBACK_FREEBET'),
   timeframe: TimeframeSchema,
-  cashbackPercentage: z.number(),
-  maxCashbackAmount: z.number(),
+  cashbackPercentage: requiredNumber(0),
+  maxCashbackAmount: requiredNumber(0),
 
   // Restricciones de apuesta (con stake y outcome)
   oddsRestriction: OddsRestrictionSchema.optional(),
@@ -123,8 +124,8 @@ export const CashbackUsageConditionsSchema = z.object({
 export const EnhancedOddsUsageConditionsSchema = z.object({
   type: z.literal('ENHANCED_ODDS'),
   timeframe: TimeframeSchema,
-  normalOdds: z.number(),
-  enhancedOdds: z.number(),
+  normalOdds: requiredNumber(0),
+  enhancedOdds: requiredNumber(0),
 
   // Restricciones de apuesta (con stake)
   stakeRestriction: StakeRestrictionSchema.optional(),
@@ -142,7 +143,7 @@ export const EnhancedOddsUsageConditionsSchema = z.object({
 export const CasinoSpinsUsageConditionsSchema = z.object({
   type: z.literal('CASINO_SPINS'),
   timeframe: TimeframeSchema,
-  spinsCount: z.number().min(1),
+  spinsCount: requiredNumber(1),
   gameTitle: z.string().optional(),
 });
 

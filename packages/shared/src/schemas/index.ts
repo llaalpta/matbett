@@ -21,6 +21,7 @@ export * from './reward.schema';
 export * from './type-specific-fields.schema';
 export * from './usage-conditions.schema';
 export * from './usage-tracking.schema';
+export * from './utils';
 
 // Timeframe exports (explicit to avoid conflicts with enums like AnchorEvent)
 export {

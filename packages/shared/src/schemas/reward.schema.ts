@@ -10,6 +10,7 @@ import {
   RewardStatusSchema,
   RewardValueTypeSchema,
 } from './enums';
+import { requiredNumber } from './utils';
 import { QualifyConditionSchema, QualifyConditionEntitySchema } from './qualify-condition.schema';
 import {
   FreeBetUsageConditionsSchema,
@@ -69,7 +70,7 @@ const RewardStateTimestampsSchema = z.object({
  */
 const BaseRewardSchema = z.object({
   id: z.string().optional(),
-  value: z.number().min(0),
+  value: requiredNumber(0),
   valueType: RewardValueTypeSchema,
   activationMethod: ActivationMethodSchema,
   claimMethod: ClaimMethodSchema,

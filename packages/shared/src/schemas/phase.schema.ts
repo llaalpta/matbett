@@ -41,7 +41,7 @@ const PhaseStateTimestampsSchema = z.object({
 export const PhaseSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'El nombre es requerido'),
-  description: z.string().min(1, 'La descripción es requerida'),
+  description: z.string().optional(),
   status: PhaseStatusSchema.optional(),
   activationMethod: ActivationMethodSchema,
   timeframe: TimeframeSchema,

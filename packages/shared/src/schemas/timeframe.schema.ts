@@ -8,6 +8,7 @@ import {
   PhaseAnchorEventSchema,
   PromotionAnchorEventSchema,
 } from './enums';
+import { requiredNumber } from './utils';
 
 // =============================================
 // TIMEFRAME ANCHOR (solo referencias)
@@ -38,7 +39,7 @@ export const AbsoluteTimeframeSchema = z.object({
 export const RelativeTimeframeSchema = z.object({
   mode: z.literal('RELATIVE'),
   anchor: TimeframeAnchorSchema,
-  offsetDays: z.number(),
+  offsetDays: requiredNumber(1),
   // "end" in a relative timeframe is often calculated dynamically, but can be a hard date
   end: z.date().optional(),
 });

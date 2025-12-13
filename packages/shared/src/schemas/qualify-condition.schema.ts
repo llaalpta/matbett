@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { QualifyConditionStatusSchema, CashbackCalculationMethodSchema } from './enums';
+import { requiredNumber } from './utils';
 import { TimeframeSchema } from './timeframe.schema';
 import {
   OddsRestrictionSchema,
@@ -92,7 +93,7 @@ const BaseDepositConditionsSchema = z.object({
  */
 export const DepositConditionsFixedValueSchema = BaseDepositConditionsSchema.extend({
   contributesToRewardValue: z.literal(false),
-  targetAmount: z.number().min(0), // Depósito exacto requerido
+  targetAmount: requiredNumber(0), // Depósito exacto requerido
   // ❌ NO tiene minAmount, maxAmount, bonusPercentage, maxBonusAmount
 });
 
@@ -102,10 +103,10 @@ export const DepositConditionsFixedValueSchema = BaseDepositConditionsSchema.ext
  */
 export const DepositConditionsCalculatedValueSchema = BaseDepositConditionsSchema.extend({
   contributesToRewardValue: z.literal(true),
-  minAmount: z.number().min(0), // OBLIGATORIO
+  minAmount: requiredNumber(0),
   maxAmount: z.number().min(0).optional(),
-  bonusPercentage: z.number().min(0).max(500), // % del depósito que se devuelve como bonus
-  maxBonusAmount: z.number().min(0), // Límite máximo de bonus
+  bonusPercentage: requiredNumber(0),
+  maxBonusAmount: requiredNumber(0),
   // ❌ NO tiene targetAmount
 });
 
@@ -152,7 +153,7 @@ const BaseBetConditionsSchema = z.object({
  */
 export const BetConditionsFixedValueSchema = BaseBetConditionsSchema.extend({
   contributesToRewardValue: z.literal(false),
-  targetStake: z.number().min(0), // Stake exacto requerido
+  targetStake: requiredNumber(0),
   // ❌ NO tiene stakeRestriction, returnPercentage, maxRewardAmount
 });
 
@@ -165,13 +166,13 @@ export const BetConditionsCalculatedValueSchema = BaseBetConditionsSchema.extend
 
   // Restricciones de stake (rango)
   stakeRestriction: z.object({
-    minStake: z.number().min(0), // OBLIGATORIO
+    minStake: requiredNumber(0),
     maxStake: z.number().min(0).optional(),
   }),
 
   // Cálculo del valor de la reward
-  returnPercentage: z.number().min(0).max(100), // % del stake que se devuelve
-  maxRewardAmount: z.number().min(0), // Límite máximo de reward
+  returnPercentage: requiredNumber(0),
+  maxRewardAmount: requiredNumber(0),
   // ❌ NO tiene targetStake
 });
 
@@ -189,8 +190,8 @@ export const BetConditionsSpecificSchema = z.discriminatedUnion('contributesToRe
  * APLANADO: Incluye campos de BetConditionsSchema directamente (opcionales)
  */
 export const LossesCashbackConditionsSchema = z.object({
-  cashbackPercentage: z.number().min(0).max(1),
-  maxCashbackAmount: z.number().min(0),
+  cashbackPercentage: requiredNumber(0),
+  maxCashbackAmount: requiredNumber(0),
   calculationMethod: CashbackCalculationMethodSchema,
   calculationPeriod: z.string().optional(),
   
