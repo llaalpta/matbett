@@ -32,8 +32,8 @@ export const TimeframeAnchorSchema = z.object({
 
 export const AbsoluteTimeframeSchema = z.object({
   mode: z.literal('ABSOLUTE'),
-  start: z.date(),
-  end: z.date().optional(),
+  start: z.coerce.date(), // Permite Date o String ISO
+  end: z.coerce.date().optional(),
 });
 
 export const RelativeTimeframeSchema = z.object({
@@ -41,7 +41,7 @@ export const RelativeTimeframeSchema = z.object({
   anchor: TimeframeAnchorSchema,
   offsetDays: requiredNumber(1),
   // "end" in a relative timeframe is often calculated dynamically, but can be a hard date
-  end: z.date().optional(),
+  end: z.coerce.date().optional(),
 });
 
 export const PromotionTimeframeSchema = z.object({
