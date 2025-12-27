@@ -1,0 +1,392 @@
+// =============================================
+// PRISMA SCHEMA - MatBett Backend
+// Adaptado a tipos del frontend
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================
+// USUARIOS Y AUTENTICACIÓN
+// =============================================
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  hashedPassword String
+  name           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones
+  promotions        Promotion[]
+  deposits          Deposit[]
+  bets              Bet[]
+  refreshTokens     RefreshToken[]
+  bookmakerAccounts BookmakerAccount[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// =============================================
+// BOOKMAKER ACCOUNTS
+// =============================================
+
+model BookmakerAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bookmaker         String   // Stores the ID from bookmakerOptions (e.g., 'bookmaker1')
+  accountIdentifier String   // User's username/email for this bookmaker
+
+  // Balances
+  realBalance       Float    @default(0)
+  bonusBalance      Float    @default(0)
+  freebetBalance    Float    @default(0)
+
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, bookmaker]) // A user can only have one account per bookmaker
+  @@index([userId])
+  @@map("bookmaker_accounts")
+}
+
+
+// =============================================
+// PROMOCIONES
+// =============================================
+
+model Promotion {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  bookmaker   String // "BET365", "888SPORT", etc.
+  status      String  @default("NOT_STARTED") // "NOT_STARTED", "ACTIVE", "COMPLETED", "EXPIRED"
+  timeframe   Json // AbsoluteTimeframe: { mode: "ABSOLUTE", start: Date, end?: Date }
+
+  // Campos adicionales del frontend
+  cardinality      String @default("SINGLE") // "SINGLE", "MULTIPLE"
+  activationMethod String @default("AUTOMATIC") // "AUTOMATIC", "MANUAL", "CLICK", etc.
+  totalBalance     Float  @default(0)
+
+  // Timestamps de estado (para timeframes)
+  activatedAt DateTime?
+  completedAt DateTime?
+  expiredAt   DateTime?
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relaciones
+  phases Phase[]
+
+  @@index([userId, status])
+  @@index([bookmaker])
+  @@map("promotions")
+}
+
+// =============================================
+// FASES
+// =============================================
+
+model Phase {
+  id               String  @id @default(cuid())
+  name             String
+  description      String?
+  status           String  @default("NOT_STARTED") // "NOT_STARTED", "ACTIVE", "COMPLETED", "EXPIRED"
+  timeframe        Json // Timeframe: AbsoluteTimeframe | RelativeTimeframe
+  activationMethod String  @default("AUTOMATIC")
+  totalBalance     Float   @default(0)
+
+  // Timestamps de estado (para timeframes)
+  activatedAt DateTime?
+  completedAt DateTime?
+  expiredAt   DateTime?
+
+  // Relaciones
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  // Pool de condiciones de calificación reutilizables
+  availableQualifyConditions RewardQualifyCondition[]
+
+  // Rewards de esta fase
+  rewards Reward[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([promotionId, status])
+  @@map("phases")
+}
+
+// =============================================
+// REWARDS
+// =============================================
+
+model Reward {
+  id                String  @id @default(cuid())
+  type              String // "FREEBET", "CASHBACK_FREEBET", "BET_BONUS_ROLLOVER", "BET_BONUS_NO_ROLLOVER", "ENHANCED_ODDS", "CASINO_SPINS"
+  value             Float // Valor de la recompensa
+  valueType         String  @default("FIXED") // "FIXED", "CALCULATED_FROM_CONDITIONS"
+  activationMethod  String  @default("AUTOMATIC")
+  claimMethod       String  @default("AUTOMATIC") // "AUTOMATIC", "MANUAL_CLICK", "MANUAL_CODE", "CUSTOMER_SERVICE"
+  claimRestrictions String? // Restricciones de reclamación: timeouts (48h), delays (3 días), condiciones especiales
+  status            String  @default("QUALIFYING") // "QUALIFYING", "PENDING_TO_CLAIM", "CLAIMED", "RECEIVED", "IN_USE", "USED", "EXPIRED"
+  totalBalance      Float   @default(0)
+
+  // Timestamps de estado (para timeframes y eventos)
+  qualifyConditionsFulfilledAt DateTime?
+  claimedAt                    DateTime?
+  receivedAt                   DateTime?
+  useStartedAt                 DateTime?
+  useCompletedAt               DateTime?
+  expiredAt                    DateTime?
+
+  // Relaciones
+  phaseId String
+  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  // Qualify conditions que este reward usa (pueden ser del pool o propias)
+  qualifyConditions RewardQualifyCondition[] @relation("RewardToQualifyConditions")
+
+  // Type-specific fields (JSON embebido - campos específicos por tipo de reward)
+  typeSpecificFields Json? // Campos propios de cada tipo:
+  // FREEBET: { stakeNotReturned: boolean }
+  // Otros tipos: null
+
+  // Usage conditions (JSON embebido - configuración inmutable, 1-to-1)
+  usageConditions Json? // Almacena las condiciones de uso según el tipo de reward
+  // Ejemplos por tipo:
+  // BET_BONUS_ROLLOVER: { multiplier: 5, maxConversionMultiplier: 1, minBetsRequired: 3, oddsRestriction: {...}, ... }
+  // FREEBET: { mustUseComplete: true, lockWinningsUntilFullyUsed: false, oddsRestriction: {...}, ... }
+  // CASHBACK_FREEBET: { cashbackPercentage: 20, maxCashbackAmount: 100, oddsRestriction: {...}, ... }
+  // CASINO_SPINS: { spinsCount: 20, gameTitle: "Gates of Olympus" }
+
+  // Usage tracking (tabla separada - datos mutables, relaciones con bets)
+  usageTracking RewardUsageTracking?
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phaseId, status])
+  @@index([type])
+  @@map("rewards")
+}
+
+// =============================================
+// REWARD USAGE TRACKING
+// =============================================
+
+model RewardUsageTracking {
+  id       String @id @default(cuid())
+  rewardId String @unique
+  reward   Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  type   String // Cache del reward.type para queries eficientes
+  status String @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "EXPIRED", "FAILED"
+  balance Float @default(0)
+
+  // Progreso específico por tipo (JSON flexible)
+  usageData Json // Ejemplos por tipo:
+  // BET_BONUS_ROLLOVER: { totalUsed: 50, rolloverProgress: 250, remainingRollover: 250 }
+  // FREEBET: { totalUsed: 25, remainingBalance: 25 }
+  // CASHBACK_FREEBET: { totalCashback: 15.50 }
+  // CASINO_SPINS: { spinsUsed: 10, spinsRemaining: 10, totalWinnings: 32.50 }
+  // ENHANCED_ODDS: { oddsUsed: 1 }
+
+  // Relaciones
+  bets Bet[]
+
+  // Lifecycle
+  startedAt   DateTime?
+  completedAt DateTime?
+  expiredAt   DateTime?
+  failedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([rewardId])
+  @@index([type, status])
+  @@index([status])
+  @@map("reward_usage_trackings")
+}
+
+// =============================================
+// QUALIFY CONDITIONS (Pool reutilizable)
+// =============================================
+
+model RewardQualifyCondition {
+  id                       String  @id @default(cuid())
+  type                     String // "DEPOSIT", "BET", "LOSSES_CASHBACK"
+  description              String? // Descripción opcional de la condición
+  status                   String  @default("PENDING") // "PENDING", "ACTIVE", "FULFILLED", "FAILED"
+  // ❌ contributesToRewardValue eliminado - ahora solo existe dentro del JSON conditions como discriminador
+  priority                 Int     @default(0)
+  balance                  Float   @default(0)
+
+  // Dependencia con otra qualify condition
+  dependsOnQualifyConditionId String?
+
+  // Timeframe de la qualify condition
+  timeframe Json // Timeframe: AbsoluteTimeframe | RelativeTimeframe
+
+  // Condiciones específicas (JSON para flexibilidad)
+  conditions Json // Ejemplos por tipo:
+  // DEPOSIT: { minAmount: 50, bonusPercentage: 100, depositCode?: "SPT100" }
+  // BET: { targetPercentageOfDeposit?: 50, allowRetries: true, betConditions: {...} }
+  // LOSSES_CASHBACK: { cashbackPercentage: 20, maxCashbackAmount: 100, calculationMethod: "NET_LOSS" }
+
+  // Timestamps de estado (para timeframes y anchors)
+  startedAt    DateTime? // → QUALIFYING (cuando comienza el periodo de calificación)
+  qualifiedAt  DateTime? // → FULFILLED (cuando se cumple la condición)
+  failedAt     DateTime? // → FAILED (cuando falla la condición)
+  expiredAt    DateTime? // → EXPIRED (cuando expira el periodo)
+
+  // Relación con fase (pool)
+  phaseId String
+  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  // Relación con rewards que usan esta condición
+  rewards Reward[] @relation("RewardToQualifyConditions")
+
+  // Depósitos y bets que cumplen esta condición
+  deposits Deposit[]
+  bets     Bet[]
+
+  // Tracking de progreso (JSON para flexibilidad)
+  trackingData Json? // { depositAmount?, betIds?, lossesAmount?, etc. }
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phaseId, status])
+  @@index([type])
+  @@map("reward_qualify_conditions")
+}
+
+// =============================================
+// DEPÓSITOS
+// =============================================
+
+model Deposit {
+  id        String   @id @default(cuid())
+  bookmaker String
+  amount    Float
+  code      String? // Código promocional usado
+  date      DateTime
+
+  // Contexto promocional (opcional - si está asociado a una qualify condition)
+  qualifyConditionId String?
+  qualifyCondition   RewardQualifyCondition? @relation(fields: [qualifyConditionId], references: [id])
+
+  // Contexto promocional completo (información derivada guardada como JSON)
+  // Incluye información sobre la promoción, fase, reward, qualify condition, etc.
+  promotionContext Json?
+
+  // Usuario
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, bookmaker])
+  @@index([qualifyConditionId])
+  @@index([date])
+  @@map("deposits")
+}
+
+// =============================================
+// APUESTAS
+// =============================================
+
+model Bet {
+  id            String  @id @default(cuid())
+  bookmaker     String
+  type          String // "BACK", "LAY"
+  role          String? // "MAIN", "HEDGE1", "HEDGE2" (para matched betting)
+  eventName     String
+  marketName    String
+  selectionName String
+  odds          Float
+  stake         Float
+  commission    Float   @default(0)
+
+  // Resultados
+  status    String @default("PENDING") // "PENDING", "WON", "LOST", "VOID", "CASHOUT"
+  profit    Float?
+  liability Float?
+
+  // Contexto promocional (opcional)
+  qualifyConditionId String?
+  qualifyCondition   RewardQualifyCondition? @relation(fields: [qualifyConditionId], references: [id])
+
+  usageTrackingId String?
+  usageTracking   RewardUsageTracking? @relation(fields: [usageTrackingId], references: [id])
+
+  // Matched betting (agrupación de bets relacionadas)
+  hedgeGroupId String? // Para agrupar bets relacionadas
+  parentBetId  String? // Referencia a la bet principal
+  parentBet    Bet?    @relation("HedgeBets", fields: [parentBetId], references: [id])
+  hedgeBets    Bet[]   @relation("HedgeBets")
+
+  // Usuario
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  placedAt  DateTime
+  settledAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, bookmaker])
+  @@index([hedgeGroupId])
+  @@index([qualifyConditionId])
+  @@index([usageTrackingId])
+  @@map("bets")
+}
+
+// =============================================
+// CONFIGURACIÓN DEL SISTEMA
+// =============================================
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_config")
+}
