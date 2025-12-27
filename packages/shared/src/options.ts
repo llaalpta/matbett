@@ -220,6 +220,14 @@ export const qualifyConditionStatusOptions = [
 ];
 export type QualifyConditionStatus = (typeof qualifyConditionStatusOptions)[number]['value'];
 
+export const qualifyConditionAnchorEventOptions = [
+  { value: 'STARTED', label: 'Inicio de condición' },
+  { value: 'FULFILLED', label: 'Condición cumplida' },
+  { value: 'FAILED', label: 'Condición fallida' },
+  { value: 'EXPIRED', label: 'Condición expirada' },
+];
+export type QualifyConditionAnchorEvent = (typeof qualifyConditionAnchorEventOptions)[number]['value'];
+
 export const rewardQualifyConditionRoleOptions = [
   { value: 'QUALIFY_FOR_FREEBET', label: 'Calificar para Freebet' },
   { value: 'QUALIFY_FOR_BONUS', label: 'Calificar para Bono' },
@@ -324,6 +332,7 @@ export const entityTypeOptions = [
   { value: 'REWARD', label: 'Reward' },
   { value: 'PHASE', label: 'Phase' },
   { value: 'PROMOTION', label: 'Promotion' },
+  { value: 'QUALIFY_CONDITION', label: 'Qualify Condition' },
 ];
 export type EntityType = (typeof entityTypeOptions)[number]['value'];
 

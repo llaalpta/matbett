@@ -76,6 +76,7 @@ const BaseRewardSchema = z.object({
   claimMethod: ClaimMethodSchema,
   claimRestrictions: z.string().nullish(),
   status: RewardStatusSchema.optional(),
+  statusDate: z.date().nullable().optional(), // Nueva propiedad para tracking histórico
   // ❌ timeframe eliminado - Ver nota arriba sobre arquitectura de timeframes
   qualifyConditions: z.array(QualifyConditionSchema).min(0),
 });

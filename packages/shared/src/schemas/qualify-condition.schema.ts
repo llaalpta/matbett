@@ -71,6 +71,7 @@ const BaseQualifyConditionSchema = z.object({
   otherRestrictions: z.string().nullish(),
   dependsOnQualifyConditionId: z.string().nullish(),
   status: QualifyConditionStatusSchema.optional(),
+  statusDate: z.date().nullable().optional(), // Nueva propiedad para tracking histórico
   timeframe: TimeframeSchema,
 });
 

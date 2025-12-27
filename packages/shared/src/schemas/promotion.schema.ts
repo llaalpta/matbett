@@ -49,6 +49,10 @@ export const PromotionSchema = z.object({
   description: z.string().nullish(),
   bookmaker: BookmakerSchema,
   status: PromotionStatusSchema.optional(),
+  
+  // Fecha genérica asociada al estado actual
+  statusDate: z.coerce.date().nullish(),
+
   phases: z.array(PhaseSchema).min(1),
   timeframe: AbsoluteTimeframeSchema,
   cardinality: PromotionCardinalitySchema,

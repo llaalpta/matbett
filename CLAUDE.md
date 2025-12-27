@@ -493,7 +493,7 @@ export function TimeframeForm<T extends FieldValues = PromotionFormData>({
 #### 12. Cascading Generics in Hooks
 **Problem**: When a generic component uses a hook, that hook must also be generic.
 
-**Example - useTimeframeAnchorOptions**:
+**Example - useTimeframeFormLogic** (formerly `useTimeframeAnchorOptions`, now consolidated):
 ```typescript
 // ❌ WRONG - Hardcoded type breaks generic component
 export function useTimeframeAnchorOptions(
@@ -571,8 +571,7 @@ const { availableTimeframes, /* ... */ } = usePromotionLogic(initialData);
 
 // 4. Final consumer uses it
 export function TimeframeForm<T>({ availableTimeframes }: Props<T>) {
-  const { entityTypeOptions } = useTimeframeAnchorOptions<T>(
-    control,
+  const { entityTypeOptions } = useTimeframeFormLogic<T>(
     basePath,
     availableTimeframes  // ✅ Used here
   );

@@ -32,6 +32,7 @@ import {
   // Qualify
   qualifyConditionTypeOptions,
   qualifyConditionStatusOptions,
+  qualifyConditionAnchorEventOptions,
   qualifyTrackingStatusOptions,
   rewardQualifyConditionRoleOptions,
   // Bet conditions
@@ -127,6 +128,9 @@ export type QualifyConditionType = z.infer<typeof QualifyConditionTypeSchema>;
 export const QualifyConditionStatusSchema = z.enum(getValues(qualifyConditionStatusOptions));
 export type QualifyConditionStatus = z.infer<typeof QualifyConditionStatusSchema>;
 
+export const QualifyConditionAnchorEventSchema = z.enum(getValues(qualifyConditionAnchorEventOptions));
+export type QualifyConditionAnchorEvent = z.infer<typeof QualifyConditionAnchorEventSchema>;
+
 export const QualifyTrackingStatusSchema = z.enum(getValues(qualifyTrackingStatusOptions));
 export type QualifyTrackingStatus = z.infer<typeof QualifyTrackingStatusSchema>;
 
@@ -173,5 +177,6 @@ export const AnchorEventSchema = z.union([ // Add AnchorEventSchema
   RewardAnchorEventSchema,
   PhaseAnchorEventSchema,
   PromotionAnchorEventSchema,
+  QualifyConditionAnchorEventSchema,
 ]);
 export type AnchorEvent = z.infer<typeof AnchorEventSchema>; // Add AnchorEvent type

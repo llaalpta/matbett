@@ -43,6 +43,10 @@ export const PhaseSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().optional(),
   status: PhaseStatusSchema.optional(),
+  
+  // Fecha genérica asociada al estado actual
+  statusDate: z.coerce.date().nullish(),
+
   activationMethod: ActivationMethodSchema,
   timeframe: TimeframeSchema,
   availableQualifyConditions: z.array(QualifyConditionSchema),
