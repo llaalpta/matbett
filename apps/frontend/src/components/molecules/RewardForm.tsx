@@ -21,16 +21,30 @@ import {
   useFormContext,
 } from "react-hook-form";
 
-import { CheckboxField, InputField, SelectField, TextareaField, TypographyLarge } from "@/components/atoms";
+import {
+  CheckboxField,
+  InputField,
+  SelectField,
+  TextareaField,
+  TypographyLarge,
+} from "@/components/atoms";
 import { DateTimeField } from "@/components/atoms/DateTimeField";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRewardLogic } from "@/hooks/domain/useRewardLogic";
 import { buildDefaultQualifyCondition } from "@/utils/formDefaults";
-import { getUsageTypeBadgeVariant, getUsageTypeLabel } from "@/utils/usageTypeUtils";
+import {
+  getUsageTypeBadgeVariant,
+  getUsageTypeLabel,
+} from "@/utils/usageTypeUtils";
 import { useStatusDateSync } from "@/hooks/useStatusDateSync";
 
 import { QualifyConditionForm } from "./QualifyConditionForm";
@@ -58,7 +72,6 @@ export function RewardForm<T extends FieldValues>({
   rewardServerData,
   availableTimeframes,
 }: RewardFormProps<T>) {
-  
   // 1. Usar lógica de dominio desacoplada (obtiene contexto internamente)
   const {
     control,
@@ -67,14 +80,14 @@ export function RewardForm<T extends FieldValues>({
     hasContributingCondition,
     rewardType,
     valueType,
-    getPath // Helper para construir paths agnósticos
+    getPath, // Helper para construir paths agnósticos
   } = useRewardLogic(fieldPath);
 
   // Obtener setValue del contexto (useFormContext debe usarse si T es genérico, asumiendo que el componente está dentro de un FormProvider)
   const { setValue } = useFormContext();
 
   // Sincronizar fechas de estado para el reward
-  // Nota: Casting necesario porque useStatusDateSync espera tipos específicos de PromotionFormData si T no coincide, 
+  // Nota: Casting necesario porque useStatusDateSync espera tipos específicos de PromotionFormData si T no coincide,
   // pero aquí lo hacemos genérico. Asumiremos que el path es válido.
   useStatusDateSync({
     control: control as any,
@@ -85,7 +98,9 @@ export function RewardForm<T extends FieldValues>({
   });
 
   // 2. Construir el path para qualifyConditions
-  const qualifyConditionsPath = getPath("qualifyConditions") as FieldArrayPath<T>;
+  const qualifyConditionsPath = getPath(
+    "qualifyConditions"
+  ) as FieldArrayPath<T>;
 
   const {
     fields: qualifyConditions,
@@ -108,7 +123,9 @@ export function RewardForm<T extends FieldValues>({
     // which calls handleConditionTypeChange -> buildDefaultQualifyCondition(newType)
     const newCondition = buildDefaultQualifyCondition("DEPOSIT");
     // Type assertion to FieldArray element type
-    appendCondition(newCondition as FieldArray<T, typeof qualifyConditionsPath>);
+    appendCondition(
+      newCondition as FieldArray<T, typeof qualifyConditionsPath>
+    );
   };
 
   // Watch usageType para el resumen del accordion
@@ -135,10 +152,16 @@ export function RewardForm<T extends FieldValues>({
   };
 
   return (
-    <div className="w-full space-y-4 rounded-lg border border-border/50 bg-card p-5 shadow-sm">
+    <div className="border-border/50 bg-card w-full space-y-4 rounded-lg border p-5 shadow-sm">
       {canRemove && (
         <div className="flex justify-end">
-          <Button type="button" variant="ghost" size="sm" onClick={onRemove} className="text-destructive hover:text-destructive/90">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRemove}
+            className="text-destructive hover:text-destructive/90"
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             Eliminar
           </Button>
@@ -237,13 +260,14 @@ export function RewardForm<T extends FieldValues>({
         {/* Accordion para secciones colapsables */}
         <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           {/* Condiciones de calificación */}
-          <AccordionItem value="qualify" className="rounded-md border border-border bg-background border-l-4! border-l-orange-400! border-b!">
+          <AccordionItem
+            value="qualify"
+            className="border-border bg-background rounded-md border border-b! border-l-4! border-l-orange-400!"
+          >
             <AccordionTrigger className="px-6 py-4 hover:no-underline">
-              <div className="flex flex-col items-start gap-1 flex-1">
-                <TypographyLarge>
-                  Condiciones de Calificación
-                </TypographyLarge>
-                <span className="text-sm text-muted-foreground font-normal">
+              <div className="flex flex-1 flex-col items-start gap-1">
+                <TypographyLarge>Condiciones de Calificación</TypographyLarge>
+                <span className="text-muted-foreground text-sm font-normal">
                   {qualifyConditions.length === 0 &&
                     "Sin condiciones — recompensa automática"}
                   {qualifyConditions.length === 1 &&
@@ -251,11 +275,12 @@ export function RewardForm<T extends FieldValues>({
                   {qualifyConditions.length > 1 &&
                     `${qualifyConditions.length} condiciones configuradas`}
                 </span>
-              
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-4">
-              <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end ${qualifyConditions.length > 0 ? "mb-4 pb-4 border-b border-border" : ""}`}>
+              <div
+                className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end ${qualifyConditions.length > 0 ? "border-border mb-4 border-b pb-4" : ""}`}
+              >
                 <Button
                   type="button"
                   variant="outline"
@@ -279,7 +304,8 @@ export function RewardForm<T extends FieldValues>({
                   Seleccionar Existente
                 </Button>
               </div>
-              {qualifyConditions.length === 0 ? null : qualifyConditions.length === 1 ? (
+              {qualifyConditions.length ===
+              0 ? null : qualifyConditions.length === 1 ? (
                 <QualifyConditionForm<T>
                   fieldPath={`${qualifyConditionsPath}.0` as Path<T>}
                   rewardType={rewardType as string}
@@ -290,16 +316,23 @@ export function RewardForm<T extends FieldValues>({
                   isEditing={isEditing}
                   onViewTracking={createTrackingCallback(0)}
                   availableTimeframes={availableTimeframes}
-                  conditionServerData={rewardServerData?.qualifyConditions?.[0]} // Pasar datos del servidor en cascada
                 />
               ) : (
-                <Tabs defaultValue="0" onValueChange={handleQualifyConditionTabChange}>
+                <Tabs
+                  defaultValue="0"
+                  onValueChange={handleQualifyConditionTabChange}
+                >
                   <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
                     {qualifyConditions.map((_, conditionIndex) => {
                       // Get type from watched values or default to DEPOSIT if not yet available
-                      const conditionType = (qualifyConditionsValues?.[conditionIndex] as any)?.type || "DEPOSIT";
-                      const label = getLabel(qualifyConditionTypeOptions, conditionType);
-                      
+                      const conditionType =
+                        (qualifyConditionsValues?.[conditionIndex] as any)
+                          ?.type || "DEPOSIT";
+                      const label = getLabel(
+                        qualifyConditionTypeOptions,
+                        conditionType
+                      );
+
                       return (
                         <TabsTrigger
                           key={conditionIndex}
@@ -312,9 +345,14 @@ export function RewardForm<T extends FieldValues>({
                   </TabsList>
 
                   {qualifyConditions.map((field, conditionIndex) => (
-                    <TabsContent key={field.id} value={conditionIndex.toString()}>
+                    <TabsContent
+                      key={field.id}
+                      value={conditionIndex.toString()}
+                    >
                       <QualifyConditionForm<T>
-                        fieldPath={`${qualifyConditionsPath}.${conditionIndex}` as Path<T>}
+                        fieldPath={
+                          `${qualifyConditionsPath}.${conditionIndex}` as Path<T>
+                        }
                         rewardType={rewardType as string}
                         onRemove={() => removeCondition(conditionIndex)}
                         canRemove={true}
@@ -323,7 +361,6 @@ export function RewardForm<T extends FieldValues>({
                         isEditing={isEditing}
                         onViewTracking={createTrackingCallback(conditionIndex)}
                         availableTimeframes={availableTimeframes}
-                        conditionServerData={rewardServerData?.qualifyConditions?.[conditionIndex]} // Pasar datos del servidor en cascada
                       />
                     </TabsContent>
                   ))}
@@ -333,18 +370,23 @@ export function RewardForm<T extends FieldValues>({
           </AccordionItem>
 
           {/* Condiciones de uso específicas por tipo */}
-          <AccordionItem value="usage" className="rounded-md border border-border bg-background border-l-4! border-l-blue-400! border-b!">
+          <AccordionItem
+            value="usage"
+            className="border-border bg-background rounded-md border border-b! border-l-4! border-l-blue-400!"
+          >
             <AccordionTrigger className="px-6 py-4 hover:no-underline">
               <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <TypographyLarge>Condiciones de Uso</TypographyLarge>
                   {usageType && (
-                    <Badge variant={getUsageTypeBadgeVariant(usageType as string)}>
+                    <Badge
+                      variant={getUsageTypeBadgeVariant(usageType as string)}
+                    >
                       {getUsageTypeLabel(usageType as string)}
                     </Badge>
                   )}
                 </div>
-                <span className="text-sm font-normal text-muted-foreground">
+                <span className="text-muted-foreground text-sm font-normal">
                   Configuración de uso de la recompensa
                 </span>
               </div>
@@ -360,9 +402,7 @@ export function RewardForm<T extends FieldValues>({
 
         {/* Seguimiento de uso específico por tipo - solo en edición */}
         {isEditing && rewardServerData && (
-          <UsageTrackingForm
-            rewardServerData={rewardServerData}
-          />
+          <UsageTrackingForm rewardServerData={rewardServerData} />
         )}
       </div>
     </div>

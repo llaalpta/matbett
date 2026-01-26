@@ -33,7 +33,7 @@ export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe = {
 const createBlankPromotion = (): PromotionFormData => ({
   name: "",
   description: "",
-  bookmaker: undefined,
+  bookmaker: "Bet365",
   status: "NOT_STARTED",
   cardinality: "SINGLE",
   activationMethod: "AUTOMATIC",
