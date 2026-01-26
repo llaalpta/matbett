@@ -237,7 +237,7 @@ export function RewardForm<T extends FieldValues>({
         {/* Accordion para secciones colapsables */}
         <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           {/* Condiciones de calificación */}
-          <AccordionItem value="qualify" className="rounded-md border border-border bg-background !border-l-4 !border-l-orange-400 !border-b">
+          <AccordionItem value="qualify" className="rounded-md border border-border bg-background border-l-4! border-l-orange-400! border-b!">
             <AccordionTrigger className="px-6 py-4 hover:no-underline">
               <div className="flex flex-col items-start gap-1 flex-1">
                 <TypographyLarge>
@@ -333,7 +333,7 @@ export function RewardForm<T extends FieldValues>({
           </AccordionItem>
 
           {/* Condiciones de uso específicas por tipo */}
-          <AccordionItem value="usage" className="rounded-md border border-border bg-background !border-l-4 !border-l-blue-400 !border-b">
+          <AccordionItem value="usage" className="rounded-md border border-border bg-background border-l-4! border-l-blue-400! border-b!">
             <AccordionTrigger className="px-6 py-4 hover:no-underline">
               <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
                 <div className="flex flex-wrap items-center gap-2">

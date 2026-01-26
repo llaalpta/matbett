@@ -27,7 +27,7 @@ export const promotionRouter = router({
     .input(PromotionListInputSchema)
     .output(createPaginatedResponseSchema(PromotionEntitySchema))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.promotionService.list(input);
+      const result = await ctx.promotionService.list(ctx.userId, input);
       return result;
     }),
 
@@ -49,7 +49,7 @@ export const promotionRouter = router({
     .input(PromotionSchema)
     .output(PromotionEntitySchema)
     .mutation(async ({ ctx, input }) => {
-      const promotion = await ctx.promotionService.create(input);
+      const promotion = await ctx.promotionService.create(input, ctx.userId);
       return promotion;
     }),
 

@@ -46,20 +46,9 @@ export class PromotionService implements IPromotionService {
    * @param data - The promotion data adhering to the shared Promotion schema.
    * @returns The created promotion entity.
    */
-  async create(data: Promotion): Promise<PromotionEntity> {
-    // --- DIAGNÓSTICO DE FECHA ---
-    console.log('🔍 PromotionService.create - Incoming data.timeframe.start:', {
-      value: data.timeframe.start,
-      type: typeof data.timeframe.start,
-      isDateInstance: data.timeframe.start instanceof Date,
-    });
-    // --- FIN DIAGNÓSTICO ---
-
+  async create(data: Promotion, userId: string): Promise<PromotionEntity> {
     // 1. Validation
     const validated = PromotionSchema.parse(data);
-
-    // TODO: Get real userId from auth context
-    const userId = 'temp-user';
 
     // 2. Transformation (Generates IDs and the entire creation graph)
     const prismaInput = toPromotionCreateInput(validated, userId);
@@ -104,10 +93,10 @@ export class PromotionService implements IPromotionService {
    * @param input - Parameters for pagination, filters, and sorting.
    * @returns A paginated response of promotion entities.
    */
-  async list(input: PromotionListInput): Promise<PaginatedResponse<PromotionEntity>> {
+  async list(userId: string, input: PromotionListInput): Promise<PaginatedResponse<PromotionEntity>> {
     const { pageIndex, pageSize, status, bookmaker, sorting } = input;
 
-    const where: Prisma.PromotionWhereInput = {};
+    const where: Prisma.PromotionWhereInput = { userId };
     if (status) {
       const parsedStatus = PromotionStatusSchema.safeParse(status);
       if (parsedStatus.success) where.status = parsedStatus.data;

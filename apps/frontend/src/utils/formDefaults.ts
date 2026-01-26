@@ -2,7 +2,8 @@ import {
   PromotionSchema,
   type AbsoluteTimeframe,
   type QualifyConditionType,
-} from '@matbett/shared';
+  type Bookmaker,
+} from "@matbett/shared";
 
 import type {
   PromotionFormData,
@@ -13,15 +14,14 @@ import type {
   PhaseServerModel,
   RewardServerModel,
   RewardQualifyConditionServerModel,
-} from '@/types/hooks';
-
+} from "@/types/hooks";
 
 // =============================================
 // CONSTANTS
 // =============================================
 
 export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe = {
-  mode: 'ABSOLUTE', // Literal type matches enum value
+  mode: "ABSOLUTE", // Literal type matches enum value
   start: new Date(),
   end: undefined,
 };
@@ -31,14 +31,14 @@ export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe = {
 // =============================================
 
 const createBlankPromotion = (): PromotionFormData => ({
-  name: '',
-  description: '',
+  name: "",
+  description: "",
   bookmaker: undefined,
-  status: 'NOT_STARTED',
-  cardinality: 'SINGLE',
-  activationMethod: 'AUTOMATIC',
+  status: "NOT_STARTED",
+  cardinality: "SINGLE",
+  activationMethod: "AUTOMATIC",
   timeframe: {
-    mode: 'ABSOLUTE',
+    mode: "ABSOLUTE",
     start: new Date(),
     end: undefined,
   },
@@ -63,7 +63,7 @@ export const buildDefaultPromotion = (
     return result.data; // Return the fully typed, parsed data
   } else {
     console.error(
-      'Zod validation failed for initial promotion data:',
+      "Zod validation failed for initial promotion data:",
       result.error.flatten()
     );
     // Fallback to a blank form if server data is malformed.
@@ -72,7 +72,7 @@ export const buildDefaultPromotion = (
 };
 
 export const buildDefaultAbsoluteTimeframe = (): AbsoluteTimeframe => ({
-  mode: 'ABSOLUTE',
+  mode: "ABSOLUTE",
   start: new Date(),
   end: undefined,
 });
@@ -186,7 +186,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "FREEBET",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -212,7 +212,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "CASHBACK_FREEBET",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -231,7 +231,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "BET_BONUS_ROLLOVER",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -260,7 +260,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "BET_BONUS_NO_ROLLOVER",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -282,7 +282,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "ENHANCED_ODDS",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -314,7 +314,7 @@ export const buildDefaultReward = (
         usageConditions: {
           type: "CASINO_SPINS",
           timeframe: {
-            mode: 'ABSOLUTE',
+            mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
           } as AbsoluteTimeframe,
@@ -369,7 +369,7 @@ export function buildDefaultQualifyCondition(
   let contributesToRewardValue: boolean | undefined;
   let actualConditionData: RewardQualifyConditionServerModel | undefined;
 
-  if (typeof contributesToRewardValueOrData === 'boolean') {
+  if (typeof contributesToRewardValueOrData === "boolean") {
     // New signature: buildDefaultQualifyCondition(type, boolean, conditionData?)
     contributesToRewardValue = contributesToRewardValueOrData;
     actualConditionData = conditionData;
@@ -392,7 +392,7 @@ export function buildDefaultQualifyCondition(
     timeframe:
       conditionData?.timeframe ||
       ({
-        mode: 'ABSOLUTE',
+        mode: "ABSOLUTE",
         start: new Date(),
         end: undefined,
       } as AbsoluteTimeframe),
@@ -406,12 +406,16 @@ export function buildDefaultQualifyCondition(
 
   switch (type) {
     case "DEPOSIT": {
-      const depositConditions = conditionData && conditionData.type === 'DEPOSIT'
-        ? conditionData.conditions
-        : undefined;
+      const depositConditions =
+        conditionData && conditionData.type === "DEPOSIT"
+          ? conditionData.conditions
+          : undefined;
 
       // Discriminador: Usar parámetro si se proporciona, sino del servidor, sino default a FIXED (false)
-      const finalContributesToRewardValue = contributesToRewardValue ?? depositConditions?.contributesToRewardValue ?? false;
+      const finalContributesToRewardValue =
+        contributesToRewardValue ??
+        depositConditions?.contributesToRewardValue ??
+        false;
 
       // Campos comunes
       const commonDepositFields = {
@@ -422,40 +426,51 @@ export function buildDefaultQualifyCondition(
       return {
         type: "DEPOSIT",
         ...baseCondition,
-        conditions: finalContributesToRewardValue ? {
-          // CALCULATED VALUE: "Deposita mínimo X€, recibe Y% bonus, máximo Z€"
-          contributesToRewardValue: true,
-          ...commonDepositFields,
-          minAmount: depositConditions && 'minAmount' in depositConditions
-            ? (depositConditions.minAmount ?? undefined)
-            : undefined,
-          maxAmount: depositConditions && 'maxAmount' in depositConditions
-            ? depositConditions.maxAmount
-            : undefined,
-          bonusPercentage: depositConditions && 'bonusPercentage' in depositConditions
-            ? (depositConditions.bonusPercentage ?? undefined)
-            : undefined,
-          maxBonusAmount: depositConditions && 'maxBonusAmount' in depositConditions
-            ? (depositConditions.maxBonusAmount ?? undefined)
-            : undefined,
-        } : {
-          // FIXED VALUE: "Deposita X€ exactos"
-          contributesToRewardValue: false,
-          ...commonDepositFields,
-          targetAmount: depositConditions && 'targetAmount' in depositConditions
-            ? (depositConditions.targetAmount ?? undefined)
-            : undefined,
-        },
+        conditions: finalContributesToRewardValue
+          ? {
+              // CALCULATED VALUE: "Deposita mínimo X€, recibe Y% bonus, máximo Z€"
+              contributesToRewardValue: true,
+              ...commonDepositFields,
+              minAmount:
+                depositConditions && "minAmount" in depositConditions
+                  ? (depositConditions.minAmount ?? undefined)
+                  : undefined,
+              maxAmount:
+                depositConditions && "maxAmount" in depositConditions
+                  ? depositConditions.maxAmount
+                  : undefined,
+              bonusPercentage:
+                depositConditions && "bonusPercentage" in depositConditions
+                  ? (depositConditions.bonusPercentage ?? undefined)
+                  : undefined,
+              maxBonusAmount:
+                depositConditions && "maxBonusAmount" in depositConditions
+                  ? (depositConditions.maxBonusAmount ?? undefined)
+                  : undefined,
+            }
+          : {
+              // FIXED VALUE: "Deposita X€ exactos"
+              contributesToRewardValue: false,
+              ...commonDepositFields,
+              targetAmount:
+                depositConditions && "targetAmount" in depositConditions
+                  ? (depositConditions.targetAmount ?? undefined)
+                  : undefined,
+            },
       };
     }
 
     case "BET": {
-      const betConditions = conditionData && conditionData.type === 'BET'
-        ? conditionData.conditions
-        : undefined;
+      const betConditions =
+        conditionData && conditionData.type === "BET"
+          ? conditionData.conditions
+          : undefined;
 
       // Discriminador: Usar parámetro si se proporciona, sino del servidor, sino default a FIXED (false)
-      const finalContributesToRewardValue = contributesToRewardValue ?? betConditions?.contributesToRewardValue ?? false;
+      const finalContributesToRewardValue =
+        contributesToRewardValue ??
+        betConditions?.contributesToRewardValue ??
+        false;
 
       // Campos comunes a ambos tipos (FIXED y CALCULATED)
       const commonBetFields = {
@@ -483,38 +498,48 @@ export function buildDefaultQualifyCondition(
       return {
         type: "BET",
         ...baseCondition,
-        conditions: finalContributesToRewardValue ? {
-          // CALCULATED VALUE: "Apuesta mínimo X€, recibe Y%, máximo Z€"
-          contributesToRewardValue: true,
-          ...commonBetFields,
-          stakeRestriction: betConditions && 'stakeRestriction' in betConditions ? {
-            minStake: betConditions.stakeRestriction.minStake ?? undefined,
-            maxStake: betConditions.stakeRestriction.maxStake,
-          } : {
-            minStake: undefined,
-            maxStake: undefined,
-          },
-          returnPercentage: betConditions && 'returnPercentage' in betConditions
-            ? (betConditions.returnPercentage ?? undefined)
-            : undefined,
-          maxRewardAmount: betConditions && 'maxRewardAmount' in betConditions
-            ? (betConditions.maxRewardAmount ?? undefined)
-            : undefined,
-        } : {
-          // FIXED VALUE: "Apuesta X€ exactos"
-          contributesToRewardValue: false,
-          ...commonBetFields,
-          targetStake: betConditions && 'targetStake' in betConditions
-            ? (betConditions.targetStake ?? undefined)
-            : undefined,
-        },
+        conditions: finalContributesToRewardValue
+          ? {
+              // CALCULATED VALUE: "Apuesta mínimo X€, recibe Y%, máximo Z€"
+              contributesToRewardValue: true,
+              ...commonBetFields,
+              stakeRestriction:
+                betConditions && "stakeRestriction" in betConditions
+                  ? {
+                      minStake:
+                        betConditions.stakeRestriction.minStake ?? undefined,
+                      maxStake: betConditions.stakeRestriction.maxStake,
+                    }
+                  : {
+                      minStake: undefined,
+                      maxStake: undefined,
+                    },
+              returnPercentage:
+                betConditions && "returnPercentage" in betConditions
+                  ? (betConditions.returnPercentage ?? undefined)
+                  : undefined,
+              maxRewardAmount:
+                betConditions && "maxRewardAmount" in betConditions
+                  ? (betConditions.maxRewardAmount ?? undefined)
+                  : undefined,
+            }
+          : {
+              // FIXED VALUE: "Apuesta X€ exactos"
+              contributesToRewardValue: false,
+              ...commonBetFields,
+              targetStake:
+                betConditions && "targetStake" in betConditions
+                  ? (betConditions.targetStake ?? undefined)
+                  : undefined,
+            },
       };
     }
 
     case "LOSSES_CASHBACK": {
-      const lossesConditions = conditionData && conditionData.type === 'LOSSES_CASHBACK'
-        ? conditionData.conditions
-        : undefined;
+      const lossesConditions =
+        conditionData && conditionData.type === "LOSSES_CASHBACK"
+          ? conditionData.conditions
+          : undefined;
 
       return {
         type: "LOSSES_CASHBACK",
@@ -522,7 +547,8 @@ export function buildDefaultQualifyCondition(
         conditions: {
           cashbackPercentage: lossesConditions?.cashbackPercentage ?? 0.1,
           maxCashbackAmount: lossesConditions?.maxCashbackAmount ?? 50,
-          calculationMethod: lossesConditions?.calculationMethod ?? "NET_LOSSES",
+          calculationMethod:
+            lossesConditions?.calculationMethod ?? "NET_LOSSES",
           calculationPeriod: lossesConditions?.calculationPeriod,
           // Campos aplanados de BetConditionsSchema (opcionales)
           oddsRestriction: lossesConditions?.oddsRestriction,
@@ -541,7 +567,7 @@ export function buildDefaultQualifyCondition(
     default:
       throw new Error(`Tipo de qualify condition no soportado: ${type}`);
   }
-};
+}
 
 // =============================================
 // HELPER BUILDERS

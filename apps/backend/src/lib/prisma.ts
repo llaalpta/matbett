@@ -10,7 +10,7 @@ import pg from 'pg';
 
 // Crear pool de conexiones PostgreSQL
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/matbett?schema=public',
+  connectionString: process.env.DATABASE_URL || 'postgresql://matbett_user:matbett_password_dev@localhost:5432/matbett_db',
 });
 
 // Crear adapter

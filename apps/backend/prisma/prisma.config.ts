@@ -6,7 +6,7 @@
 export default {
   datasources: {
     db: {
-      url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/matbett?schema=public',
+      url: process.env.DATABASE_URL || 'postgresql://matbett_user:matbett_password_dev@localhost:5432/matbett_db',
     },
   },
 };

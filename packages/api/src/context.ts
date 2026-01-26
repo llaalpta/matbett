@@ -47,9 +47,9 @@ export interface IBookmakerAccountService {
  * OUTPUTS usan tipos Entity (con id, timestamps) o PaginatedResponse
  */
 export interface IPromotionService {
-  list(input: PromotionListInput): Promise<PaginatedResponse<PromotionEntity>>;
+  list(userId: string, input: PromotionListInput): Promise<PaginatedResponse<PromotionEntity>>;
   getById(id: string): Promise<PromotionEntity | null>;
-  create(data: Promotion): Promise<PromotionEntity>;
+  create(data: Promotion, userId: string): Promise<PromotionEntity>;
   update(id: string, data: Partial<Promotion>): Promise<PromotionEntity>;
   delete(id: string): Promise<void>;
   getAvailableTimeframes(promotionId: string): Promise<AvailableTimeframes>;

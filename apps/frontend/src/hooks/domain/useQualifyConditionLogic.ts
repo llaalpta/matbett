@@ -32,7 +32,7 @@ export function useQualifyConditionLogic<T extends FieldValues>(
       const defaultCondition = buildDefaultQualifyCondition(newType);
 
       setValue(basePath, defaultCondition as PathValue<T, Path<T>>, {
-        shouldValidate: true,
+        shouldValidate: false,
         shouldDirty: true,
       });
     },
@@ -51,7 +51,7 @@ export function useQualifyConditionLogic<T extends FieldValues>(
         const newCondition = buildDefaultQualifyCondition('BET', newValue);
 
         setValue(basePath, newCondition as PathValue<T, Path<T>>, {
-          shouldValidate: true,
+          shouldValidate: false,
           shouldDirty: true,
         });
       } else if (conditionType === 'DEPOSIT') {
@@ -59,7 +59,7 @@ export function useQualifyConditionLogic<T extends FieldValues>(
         const newCondition = buildDefaultQualifyCondition('DEPOSIT', newValue);
 
         setValue(basePath, newCondition as PathValue<T, Path<T>>, {
-          shouldValidate: true,
+          shouldValidate: false,
           shouldDirty: true,
         });
       }

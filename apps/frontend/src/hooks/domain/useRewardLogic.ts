@@ -51,7 +51,7 @@ export function useRewardLogic<T extends FieldValues>(
       // Si basePath existe, es un objeto nested.
       if (basePath) {
          setValue(basePath, newRewardData as PathValue<T, Path<T>>, {
-           shouldValidate: true,
+           shouldValidate: false,
            shouldDirty: true,
          });
       } else {
@@ -71,11 +71,11 @@ export function useRewardLogic<T extends FieldValues>(
   const handleValueTypeChange = useCallback(
     (newValueType: string) => {
       // Actualizar el valueType
-      setValue(getPath("valueType") as Path<T>, newValueType as PathValue<T, Path<T>>, { shouldValidate: true });
+      setValue(getPath("valueType") as Path<T>, newValueType as PathValue<T, Path<T>>, { shouldValidate: false });
 
       // Si es CALCULATED, resetear value a 0
       if (newValueType === "CALCULATED_FROM_CONDITIONS") {
-        setValue(getPath("value") as Path<T>, 0 as PathValue<T, Path<T>>, { shouldValidate: true });
+        setValue(getPath("value") as Path<T>, 0 as PathValue<T, Path<T>>, { shouldValidate: false });
       }
 
       // Reconstruir todas las conditions preservando campos comunes
@@ -122,7 +122,7 @@ export function useRewardLogic<T extends FieldValues>(
             setValue(
               `${conditionsPath}.${index}` as Path<T>,
               newCondition as PathValue<T, Path<T>>,
-              { shouldValidate: true, shouldDirty: true }
+              { shouldValidate: false, shouldDirty: true }
             );
           }
         });
