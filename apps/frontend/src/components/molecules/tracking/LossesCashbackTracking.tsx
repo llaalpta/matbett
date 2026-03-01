@@ -1,15 +1,14 @@
 "use client";
 
 import { qualifyTrackingStatusOptions } from "@matbett/shared";
-import { Control, FieldPath } from "react-hook-form";
+import { Control, FieldValues } from "react-hook-form";
 
 import { InputField, SelectField } from "@/components/atoms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { PromotionFormData } from "@/types/hooks";
 
 interface LossesCashbackTrackingProps {
-  control: Control<PromotionFormData>;
+  control: Control<FieldValues>;
   basePath: string;
 }
 
@@ -28,7 +27,7 @@ export function LossesCashbackTracking({
       <CardContent className="space-y-4">
         <SelectField
           control={control}
-          name={`${basePath}.tracking.status` as FieldPath<PromotionFormData>}
+          name={`${basePath}.tracking.status`}
           label="Estado del Seguimiento"
           options={qualifyTrackingStatusOptions}
         />
@@ -40,18 +39,14 @@ export function LossesCashbackTracking({
           <div className="grid grid-cols-2 gap-4">
             <InputField
               control={control}
-              name={
-                `${basePath}.tracking.totalStakes` as FieldPath<PromotionFormData>
-              }
+              name={`${basePath}.tracking.totalStakes`}
               label="Total Apostado (€)"
               type="number"
               placeholder="0"
             />
             <InputField
               control={control}
-              name={
-                `${basePath}.tracking.totalWinnings` as FieldPath<PromotionFormData>
-              }
+              name={`${basePath}.tracking.totalWinnings`}
               label="Total Ganado (€)"
               type="number"
               placeholder="0"
@@ -61,18 +56,14 @@ export function LossesCashbackTracking({
           <div className="grid grid-cols-2 gap-4">
             <InputField
               control={control}
-              name={
-                `${basePath}.tracking.totalLosses` as FieldPath<PromotionFormData>
-              }
+              name={`${basePath}.tracking.totalLosses`}
               label="Total Perdido (€)"
               type="number"
               placeholder="0"
             />
             <InputField
               control={control}
-              name={
-                `${basePath}.tracking.calculatedCashbackAmount` as FieldPath<PromotionFormData>
-              }
+              name={`${basePath}.tracking.calculatedCashbackAmount`}
               label="Cashback Calculado (€)"
               type="number"
               placeholder="0"
@@ -81,9 +72,7 @@ export function LossesCashbackTracking({
 
           <InputField
             control={control}
-            name={
-              `${basePath}.tracking.appliedMaxLimit` as FieldPath<PromotionFormData>
-            }
+            name={`${basePath}.tracking.appliedMaxLimit`}
             label="Límite Aplicado (€)"
             type="number"
             placeholder="0"

@@ -11,6 +11,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface TextareaFieldProps<
@@ -83,7 +84,7 @@ export function TextareaField<
                   required={required}
                   aria-required={required}
                   data-visual-state={visualState}
-                  className="rounded-md" // bg-background removido - conflicto con warning
+                  className="rounded-md"
                   onChange={(e) => {
                     field.onChange(e);
                     onValueChange?.(e.target.value);

@@ -1,86 +1,153 @@
 "use client";
 
-import { qualifyConditionStatusOptions, type AvailableTimeframes } from "@matbett/shared";
-import { Trash2, InfoIcon } from "lucide-react";
-import { FieldValues, Path } from "react-hook-form"; // Eliminado UseFormReturn
+import {
+  qualifyConditionStatusOptions,
+  type QualifyConditionType,
+  type AnchorCatalog,
+  type AnchorOccurrences,
+} from "@matbett/shared";
+import { Trash2 } from "lucide-react";
+import { FieldValues, Path, useFormContext } from "react-hook-form";
 
 import { SelectField, SwitchField, TextareaField } from "@/components/atoms";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useQualifyConditionLogic } from "@/hooks/domain/useQualifyConditionLogic";
-import { getFilteredQualifyConditionOptions } from "@/utils/rewardUtils";
 
 import {
   DepositCondition,
+  type DepositConditionPaths,
   QualifyBetCondition,
+  type QualifyBetConditionPaths,
   LossesCashbackCondition,
+  type LossesCashbackConditionPaths,
 } from "./conditions";
-import { TimeframeForm } from "./TimeframeForm";
+import { TimeframeForm, type TimeframePaths } from "./TimeframeForm";
+
+export interface QualifyConditionFormPaths<T extends FieldValues> {
+  basePath: Path<T> | "";
+  type: Path<T>;
+  status: Path<T>;
+  description: Path<T>;
+  otherRestrictions: Path<T>;
+  timeframe: TimeframePaths<T>;
+  contributesToRewardValue: Path<T>;
+  deposit: DepositConditionPaths<T>;
+  bet: QualifyBetConditionPaths<T>;
+  lossesCashback: LossesCashbackConditionPaths<T>;
+}
 
 interface QualifyConditionFormProps<T extends FieldValues> {
-  // form: UseFormReturn<T>; // Eliminado
-  fieldPath: Path<T>;
-  rewardType: string;
+  paths: QualifyConditionFormPaths<T>;
+  rewardType?: string;
   onRemove: () => void;
   canRemove?: boolean;
+  removeDisabledReason?: string;
   rewardValueType?: string;
   rewardHasContributingCondition?: boolean;
-  isEditing?: boolean; // If true, enables tracking features
-  onViewTracking?: () => void; // Callback when user wants to view tracking
-  availableTimeframes?: AvailableTimeframes;
+  isEditing?: boolean;
+  onViewTracking?: () => void;
+  onTypeChange?: (newType: QualifyConditionType) => void;
+  anchorCatalog?: AnchorCatalog;
+  anchorOccurrences?: AnchorOccurrences;
 }
 
 export function QualifyConditionForm<T extends FieldValues>({
-  fieldPath,
+  paths,
   rewardType,
   onRemove,
   canRemove = false,
+  removeDisabledReason,
   rewardValueType,
   rewardHasContributingCondition = false,
   isEditing = false,
   onViewTracking,
-  availableTimeframes,
+  onTypeChange,
+  anchorCatalog,
+  anchorOccurrences,
 }: QualifyConditionFormProps<T>) {
-
-  // 1. Usar hook lógico (Maneja contexto y watchers internamente)
-  const {
-    control,
-    handleConditionTypeChange,
-    handleValueTypeChange,
-    conditionType,
-    contributesToRewardValue: currentContributesToRewardValue
-  } = useQualifyConditionLogic(fieldPath);
-
-  // Get filtered options based on reward type
-  const availableConditionOptions =
-    getFilteredQualifyConditionOptions(rewardType);
+  const { control, watch } = useFormContext<T>();
+  const { getValidConditionType, conditionType, availableConditionOptions } =
+    useQualifyConditionLogic({
+      typePath: paths.type,
+      rewardType,
+    });
+  const contributesToRewardValue = watch(paths.contributesToRewardValue);
 
   return (
     <div className="space-y-4">
-      {/* Header con botón eliminar */}
-      {canRemove && (
+      {(canRemove || removeDisabledReason) && (
         <div className="flex items-center justify-end">
-          <Button type="button" variant="ghost" size="sm" onClick={onRemove} className="text-destructive hover:text-destructive/90">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Eliminar
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canRemove}
+                  onClick={() => {
+                    if (!canRemove) {
+                      return;
+                    }
+                    onRemove();
+                  }}
+                  className={
+                    canRemove
+                      ? "text-destructive hover:text-destructive/90"
+                      : "text-muted-foreground"
+                  }
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar condicion de calificacion
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {removeDisabledReason ? (
+              <TooltipContent sideOffset={6}>{removeDisabledReason}</TooltipContent>
+            ) : null}
+          </Tooltip>
         </div>
       )}
 
-      {/* Configuración básica */}
+      {(conditionType === "DEPOSIT" || conditionType === "BET") &&
+      rewardValueType === "CALCULATED_FROM_CONDITIONS" ? (
+        <SwitchField<T>
+          control={control}
+          name={paths.contributesToRewardValue}
+          label="El valor de la reward depende de esta condicion"
+          description={
+            contributesToRewardValue || !rewardHasContributingCondition
+              ? conditionType === "DEPOSIT"
+                ? "Si esta activado, el valor se calcula segun el deposito realizado."
+                : conditionType === "BET"
+                  ? "Si esta activado, el valor se calcula segun la apuesta realizada."
+                  : "Si esta activado, el valor se calcula segun la condicion de calificacion."
+              : "Otra condicion ya esta marcada para calcular el valor."
+          }
+          disabled={!contributesToRewardValue && rewardHasContributingCondition}
+        />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SelectField<T>
           control={control}
-          name={`${fieldPath}.type` as Path<T>}
-          label="Tipo de Condición"
+          name={paths.type}
+          label="Tipo de condicion"
           options={availableConditionOptions}
-          placeholder="Seleccionar tipo de condición"
-          onValueChange={(value) => handleConditionTypeChange(value)}
+          placeholder="Seleccionar tipo de condicion"
+          onValueChange={(value) => {
+            const validType = getValidConditionType(value);
+            if (!validType) {
+              return;
+            }
+            onTypeChange?.(validType);
+          }}
           required
         />
         <SelectField<T>
           control={control}
-          name={`${fieldPath}.status` as Path<T>}
+          name={paths.status}
           label="Estado"
           options={qualifyConditionStatusOptions}
         />
@@ -88,59 +155,49 @@ export function QualifyConditionForm<T extends FieldValues>({
 
       <TextareaField<T>
         control={control}
-        name={`${fieldPath}.description` as Path<T>}
-        label="Descripción"
-        placeholder="Describe brevemente esta condición de calificación..."
+        name={paths.description}
+        label="Descripcion"
+        placeholder="Describe brevemente esta condicion de calificacion..."
         rows={2}
       />
 
-      <TextareaField<T>
-        control={control}
-        name={`${fieldPath}.otherRestrictions` as Path<T>}
-        label="Otras restricciones"
-        placeholder="Ej: Solo nuevos usuarios, excluir ciertos juegos, etc."
-        rows={2}
-        tooltip="Restricciones adicionales no cubiertas por los campos específicos"
-      />
-
-      {/* Timeframe para calificación */}
       <TimeframeForm<T>
-        basePath={`${fieldPath}.timeframe` as Path<T>}
-        title="Periodo de calificación"
+        paths={paths.timeframe}
+        title="Periodo de calificacion"
         forceAbsolute={false}
         hideModeSelector={false}
-        availableTimeframes={availableTimeframes}
+        anchorCatalog={anchorCatalog}
+        anchorOccurrences={anchorOccurrences}
+        dependencySubjectLabel="Esta condicion de calificacion"
       />
 
-      {/* Renderizado condicional basado en el tipo */}
-      {conditionType === "DEPOSIT" && (
+      {conditionType === "DEPOSIT" ? (
         <DepositCondition<T>
           control={control}
-          basePath={fieldPath}
+          paths={paths.deposit}
           isEditing={isEditing}
-          rewardValueType={rewardValueType}
-          rewardHasContributingCondition={rewardHasContributingCondition}
           onViewTracking={onViewTracking}
-          onValueTypeChange={handleValueTypeChange}
         />
-      )}
+      ) : null}
 
-      {conditionType === "BET" && (
-        <QualifyBetCondition<T>
-          control={control}
-          basePath={fieldPath}
-          rewardValueType={rewardValueType}
-          rewardHasContributingCondition={rewardHasContributingCondition}
-          onValueTypeChange={handleValueTypeChange}
-        />
-      )}
+      {conditionType === "BET" ? (
+        <QualifyBetCondition<T> control={control} paths={paths.bet} />
+      ) : null}
 
-      {conditionType === "LOSSES_CASHBACK" && (
-        <LossesCashbackCondition<T>
+      {conditionType === "LOSSES_CASHBACK" ? (
+        <LossesCashbackCondition<T> control={control} paths={paths.lossesCashback} />
+      ) : null}
+
+      {conditionType === "DEPOSIT" ? (
+        <TextareaField<T>
           control={control}
-          basePath={fieldPath}
+          name={paths.otherRestrictions}
+          label="Otras restricciones"
+          placeholder="Ej: Solo nuevos usuarios, excluir ciertos juegos, etc."
+          rows={2}
+          tooltip="Restricciones adicionales no cubiertas por los campos especificos"
         />
-      )}
+      ) : null}
     </div>
   );
 }

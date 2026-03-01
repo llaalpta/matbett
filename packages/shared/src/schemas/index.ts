@@ -25,24 +25,29 @@ export * from './utils';
 
 // Timeframe exports (explicit to avoid conflicts with enums like AnchorEvent)
 export {
-  TimeframeAnchorSchema,
+  AnchorRefTypeSchema,
+  TimeframeAnchorRefSchema,
   AbsoluteTimeframeSchema,
   RelativeTimeframeSchema,
   TimeframeSchema,
-  AvailableTimeframesSchema,
-  // DTO Schemas if needed
-  TimeframeEventTimestampSchema,
-  AvailableTimeframeEntitySchema,
-  AvailableTimeframesByTypeSchema
+  AnchorCatalogSchema,
+  AnchorOccurrencesSchema,
+  AnchorCatalogEventSchema,
+  AnchorCatalogEntitySchema,
+  AnchorCatalogByTypeSchema,
+  AnchorOccurrenceSchema,
 } from './timeframe.schema';
 
 export type {
-  TimeframeAnchor,
+  AnchorRefType,
+  TimeframeAnchorRef,
   AbsoluteTimeframe,
   RelativeTimeframe,
   Timeframe,
-  AvailableTimeframes,
-  TimeframeEventTimestamp,
-  AvailableTimeframeEntity,
-  AvailableTimeframesByType
+  AnchorCatalog,
+  AnchorOccurrences,
+  AnchorCatalogEvent,
+  AnchorCatalogEntity,
+  AnchorCatalogByType,
+  AnchorOccurrence,
 } from './timeframe.schema';

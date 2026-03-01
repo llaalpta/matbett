@@ -3,6 +3,7 @@
  * Usa el nuevo patrón @trpc/tanstack-react-query
  */
 
+import type { PromotionListInput } from '@matbett/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useTRPC } from '@/lib/trpc';
@@ -28,29 +29,63 @@ export const usePromotion = (id: string | undefined) => {
   });
 };
 
-// Alias para mayor claridad en contexto de formularios
-export const useGetPromotion = usePromotion;
-
 /**
  * Hook para listar promociones con filtros opcionales
  */
-export const usePromotions = (params?: { status?: string; bookmaker?: string }) => {
+export const usePromotions = (params?: PromotionListInput) => {
   const trpc = useTRPC();
+  const safeParams: PromotionListInput = params ?? {
+    pageIndex: 0,
+    pageSize: 20,
+  };
 
   return useQuery({
-    ...trpc.promotion.list.queryOptions(params ?? {}),
+    ...trpc.promotion.list.queryOptions(safeParams),
   });
 };
 
 /**
- * Hook para obtener los timeframes disponibles de una promoción
- * Usado para configurar timeframes relativos en cualquier nivel de la jerarquía
+ * Hook para obtener el catalogo de anchors de una promocion
+ * Usado para configurar timeframes relativos en cualquier nivel de la jerarquia
  */
-export const useAvailableTimeframes = (promotionId: string | undefined) => {
+export const useAnchorCatalog = (promotionId: string | undefined) => {
   const trpc = useTRPC();
 
   return useQuery({
-    ...trpc.promotion.getAvailableTimeframes.queryOptions(
+    ...trpc.promotion.getAnchorCatalog.queryOptions(
+      { promotionId: promotionId! },
+      {
+        enabled: !!promotionId,
+      }
+    ),
+  });
+};
+
+export const useAnchorOccurrences = (promotionId: string | undefined) => {
+  const trpc = useTRPC();
+
+  return useQuery({
+    ...trpc.promotion.getAnchorOccurrences.queryOptions(
+      { promotionId: promotionId! },
+      {
+        enabled: !!promotionId,
+      }
+    ),
+  });
+};
+
+
+/**
+ * Hook para obtener el pool de qualify conditions de una promoción
+ * Usado por formularios standalone de reward para reutilizar condiciones
+ */
+export const useAvailableQualifyConditions = (
+  promotionId: string | undefined
+) => {
+  const trpc = useTRPC();
+
+  return useQuery({
+    ...trpc.promotion.getAvailableQualifyConditions.queryOptions(
       { promotionId: promotionId! },
       {
         enabled: !!promotionId,
@@ -137,18 +172,4 @@ export const useDeletePromotion = () => {
   });
 };
 
-// =============================================
-// DEPRECATED - Query Keys (ya no necesarios con tRPC)
-// =============================================
 
-/**
- * @deprecated Usar trpc.promotion.list.queryKey() directamente
- */
-export const promotionQueryKeys = {
-  all: ['promotion'] as const,
-  lists: () => [...promotionQueryKeys.all, 'list'] as const,
-  list: (filters: Record<string, unknown>) =>
-    [...promotionQueryKeys.lists(), filters] as const,
-  details: () => [...promotionQueryKeys.all, 'detail'] as const,
-  detail: (id: string) => [...promotionQueryKeys.details(), id] as const,
-};

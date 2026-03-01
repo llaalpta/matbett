@@ -459,7 +459,7 @@ Ask these questions:
 // ✅ Generic component with default type
 export function TimeframeForm<T extends FieldValues = PromotionFormData>({
   basePath,
-  availableTimeframes,
+  anchorCatalog,
 }: TimeframeFormProps<T>) {
   const formContext = useFormContext<T>();
   const { control } = formContext;
@@ -499,7 +499,7 @@ export function TimeframeForm<T extends FieldValues = PromotionFormData>({
 export function useTimeframeAnchorOptions(
   control: Control<PromotionFormData>,  // ❌ Not generic
   basePath: string,
-  availableTimeframes: AvailableTimeframes | undefined
+  anchorCatalog: AnchorCatalog | undefined
 ) {
   const entityType = useWatch({
     control,
@@ -512,7 +512,7 @@ export function useTimeframeAnchorOptions(
 export function useTimeframeAnchorOptions<T extends FieldValues = PromotionFormData>(
   control: Control<T>,  // ✅ Generic control
   basePath: string,
-  availableTimeframes: AvailableTimeframes | undefined
+  anchorCatalog: AnchorCatalog | undefined
 ) {
   const entityType = useWatch({
     control,
@@ -525,14 +525,14 @@ export function useTimeframeAnchorOptions<T extends FieldValues = PromotionFormD
 const { entityTypeOptions } = useTimeframeAnchorOptions<T>(
   control,
   basePath,
-  availableTimeframes
+  anchorCatalog
 );
 ```
 
 **Rule**: If a component is generic, all hooks it uses that receive `control` or use field paths must also be generic.
 
 #### 13. Prop Drilling for Contextual Data
-**Problem**: Passing data that depends on parent context (like `availableTimeframes`) through deeply nested components.
+**Problem**: Passing data that depends on parent context (like `anchorCatalog`) through deeply nested components.
 
 **Solution**: Explicit prop drilling when context API is overkill:
 
@@ -555,25 +555,25 @@ TimeframeForm (consume)
 ```typescript
 // 1. Domain hook fetches data
 export const usePromotionLogic = (initialData?: PromotionServerModel) => {
-  const { data: availableTimeframes } = useAvailableTimeframes(initialData?.id);
+  const { data: anchorCatalog } = useAnchorCatalog(initialData?.id);
 
   return {
     // ... other returns
-    availableTimeframes,  // ✅ Return for prop drilling
+    anchorCatalog,  // ✅ Return for prop drilling
   };
 };
 
 // 2. Top-level form extracts from hook
-const { availableTimeframes, /* ... */ } = usePromotionLogic(initialData);
+const { anchorCatalog, /* ... */ } = usePromotionLogic(initialData);
 
 // 3. Each level passes down
-<PhaseForm availableTimeframes={availableTimeframes} />
+<PhaseForm anchorCatalog={anchorCatalog} />
 
 // 4. Final consumer uses it
-export function TimeframeForm<T>({ availableTimeframes }: Props<T>) {
+export function TimeframeForm<T>({ anchorCatalog }: Props<T>) {
   const { entityTypeOptions } = useTimeframeFormLogic<T>(
     basePath,
-    availableTimeframes  // ✅ Used here
+    anchorCatalog  // ✅ Used here
   );
 }
 ```
@@ -895,3 +895,5 @@ When extracting helpers from complex hooks (like `usePromotionLogic`), use this 
 - **Domain logic hook**: Every entity with complex business rules (type changes, calculations, validations)
 - **UI state in component**: Modal management, selection tracking, UI-specific orchestration
 - **Exception (all-in-one)**: Use only for complex multi-entity forms (like `usePromotionLogic` managing phases + rewards + conditions)
+
+

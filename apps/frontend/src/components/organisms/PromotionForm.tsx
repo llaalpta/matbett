@@ -1,158 +1,276 @@
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { FormProvider, Path, useFormContext } from "react-hook-form";
 
-import React, { useEffect, useState } from "react";
-import { FormProvider, useFormContext } from "react-hook-form";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-
-import { TypographyH1, TypographyH2 } from "@/components/atoms";
+import { TypographyH2 } from "@/components/atoms";
 import { ConfirmDialog } from "@/components/atoms/ConfirmDialog";
-import { PromotionBasicInfoForm, PhaseForm, DepositQualifyModal } from "@/components/molecules";
+import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
+import {
+  DepositQualifyModal,
+  PhaseForm,
+  PromotionBasicInfoForm,
+} from "@/components/molecules";
+import { FormActionBar } from "@/components/molecules/FormActionBar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAvailableTimeframes } from "@/hooks/api/usePromotions";
 import { usePromotionLogic } from "@/hooks/domain/usePromotionLogic";
-import { usePromotionForm } from "@/hooks/usePromotionForm";
-import type { PromotionFormData, PromotionServerModel, RewardQualifyConditionServerModel } from "@/types/hooks";
-import { FormActionBar } from "@/components/molecules/FormActionBar";
+import { useFormInvalidSubmitFocus } from "@/hooks/useFormInvalidSubmitFocus";
+import {
+  normalizePromotionSubmitData,
+  usePromotionForm,
+} from "@/hooks/usePromotionForm";
+import type { PromotionFormData, PromotionServerModel } from "@/types/hooks";
 
 interface PromotionFormProps {
   initialData?: PromotionServerModel;
   onSubmit?: (data: PromotionFormData) => void;
   isLoading?: boolean;
   promotionId?: string;
-  showBackButton?: boolean; // Nueva prop
+  apiErrorMessage?: string | null;
+  onDismissApiError?: () => void;
+  showBackButton?: boolean;
   backHref?: string;
   backToLabel?: string;
 }
 
-// 1. COMPONENTE DE CONTENIDO (Consume el contexto y la lógica)
 const PromotionFormContent: React.FC<PromotionFormProps> = ({
   initialData,
   onSubmit,
   isLoading,
   promotionId,
+  apiErrorMessage,
+  onDismissApiError,
   showBackButton = false,
   backHref,
   backToLabel,
 }) => {
   const isEditing = !!promotionId;
+  const {
+    handleSubmit,
+    clearErrors,
+    formState: { errors, submitCount },
+  } = useFormContext<PromotionFormData>();
+  const { formRef, validationBannerRef, focusFirstInvalidField } =
+    useFormInvalidSubmitFocus();
 
-  // A. Obtenemos métodos de RHF del contexto (para submit)
-  const { handleSubmit, formState, watch } = useFormContext<PromotionFormData>();
-  const { isValid } = formState;
-
-
-  // B. Ejecutamos la lógica de dominio - TODO en el hook!
   const {
     phasesFieldArray,
     isSinglePhase,
     addPhase,
     removePhase,
     resetFormToDefaults,
-    // Handlers UI completos (del hook)
-    handleSinglePhaseToggle,
-    handleConfirmToggle,
-    handleFormSubmit,
-    handlePhaseTabChange,
-    handleQualifyConditionSelect,
+    handleCardinalityChange,
+    canRemovePhase,
+    getPhaseRemoveDisabledReason,
+    hasDataInAdditionalPhases,
     handleNameChange,
     handleDescriptionChange,
-    // Estado UI (del hook)
-    isDepositModalOpen,
-    closeDepositModal,
-    showConfirmDialog,
-    setShowConfirmDialog,
-    // Helpers de datos
-    getQualifyConditionPath,
-    getConditionServerData,
-    availableTimeframes,
-    // Funciones para pasar a los hijos
-    setReward,
+    anchorCatalog,
+    anchorOccurrences,
   } = usePromotionLogic(initialData);
 
-  // Extraer datos para el modal
-  const conditionPath = getQualifyConditionPath();
-  const conditionServerData = getConditionServerData();
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [selectedRewardIndex, setSelectedRewardIndex] = useState<number>();
+  const [selectedConditionIndex, setSelectedConditionIndex] =
+    useState<number>();
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
 
-  // --- Handler de submit que usa la lógica del hook ---
+  const handleRewardSelect = useCallback((_: string, index: number) => {
+    setSelectedRewardIndex(index);
+    setSelectedConditionIndex(undefined);
+  }, []);
+
+  const handleQualifyConditionSelect = useCallback(
+    (_: string, index: number) => {
+      setSelectedConditionIndex(index);
+      setIsDepositModalOpen(true);
+    },
+    []
+  );
+
+  const closeDepositModal = useCallback(() => {
+    setIsDepositModalOpen(false);
+  }, []);
+
+  const handlePhaseTabChange = useCallback((value: string) => {
+    const parsedIndex = Number.parseInt(value, 10);
+    if (Number.isNaN(parsedIndex)) {
+      return;
+    }
+    setPhaseIndex(parsedIndex);
+    setSelectedRewardIndex(undefined);
+    setSelectedConditionIndex(undefined);
+    setIsDepositModalOpen(false);
+  }, []);
+
+  const pendingSinglePhaseValueRef = useRef<
+    PromotionFormData["cardinality"] | null
+  >(null);
+
+  const handleSinglePhaseChange = useCallback(
+    (value: PromotionFormData["cardinality"]) => {
+      if (value === "SINGLE" && !isSinglePhase && hasDataInAdditionalPhases()) {
+        pendingSinglePhaseValueRef.current = value;
+        setShowConfirmDialog(true);
+        return;
+      }
+      handleCardinalityChange(value);
+    },
+    [handleCardinalityChange, hasDataInAdditionalPhases, isSinglePhase]
+  );
+
+  const handleConfirmToggle = useCallback(() => {
+    if (pendingSinglePhaseValueRef.current) {
+      handleCardinalityChange(pendingSinglePhaseValueRef.current);
+      pendingSinglePhaseValueRef.current = null;
+    }
+    setShowConfirmDialog(false);
+  }, [handleCardinalityChange]);
+
+  const handleConfirmDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      pendingSinglePhaseValueRef.current = null;
+    }
+    setShowConfirmDialog(open);
+  }, []);
+
+  const conditionPath = useMemo(() => {
+    if (
+      phaseIndex === undefined ||
+      selectedRewardIndex === undefined ||
+      selectedConditionIndex === undefined
+    ) {
+      return undefined;
+    }
+
+    return `phases.${phaseIndex}.rewards.${selectedRewardIndex}.qualifyConditions.${selectedConditionIndex}` satisfies Path<PromotionFormData>;
+  }, [phaseIndex, selectedRewardIndex, selectedConditionIndex]);
+
+  const conditionServerData = useMemo(() => {
+    if (
+      !initialData ||
+      phaseIndex === undefined ||
+      selectedRewardIndex === undefined ||
+      selectedConditionIndex === undefined
+    ) {
+      return undefined;
+    }
+
+    return initialData.phases?.[phaseIndex]?.rewards?.[selectedRewardIndex]
+      ?.qualifyConditions?.[selectedConditionIndex];
+  }, [initialData, phaseIndex, selectedRewardIndex, selectedConditionIndex]);
+
   const onFormSubmit = (data: PromotionFormData) => {
-    const processedData = handleFormSubmit(data);
+    const processedData = normalizePromotionSubmitData(data);
     onSubmit?.(processedData);
   };
 
   const shouldShowTabs = !isSinglePhase && phasesFieldArray.fields.length > 1;
+  const activePhaseIndex = Math.min(
+    phaseIndex,
+    Math.max(phasesFieldArray.fields.length - 1, 0)
+  );
 
-  // Log de valores del formulario cada vez que cambian
   useEffect(() => {
-    const subscription = watch((value, { name, type }) => {
-      console.log('📝 Form changed:', {
-        changedField: name,
-        changeType: type,
-        isValid,
-        errors: formState.errors,
-        allValues: value
-      });
-    });
-    return () => subscription.unsubscribe();
-  }, [watch, isValid, formState.errors]);
-  
+    if (activePhaseIndex !== phaseIndex) {
+      setPhaseIndex(activePhaseIndex);
+    }
+  }, [activePhaseIndex, phaseIndex]);
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6 pb-24" noValidate>
-      
-      {/* Info Básica */}
-      <div className="space-y-4">
-          <PromotionBasicInfoForm
-            onSinglePhaseChange={handleSinglePhaseToggle}
-            onNameChange={handleNameChange}
-            onDescriptionChange={handleDescriptionChange}
-            serverData={initialData} // Pasar datos del servidor para tracking
-          />
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit(onFormSubmit, focusFirstInvalidField)}
+      className="space-y-6 pb-24"
+      noValidate
+    >
+      <ValidationErrorBanner<PromotionFormData>
+        errors={errors}
+        submitCount={submitCount}
+        containerRef={validationBannerRef}
+        mode="all"
+        onDismiss={() => clearErrors()}
+      />
+      <ApiErrorBanner
+        errorMessage={apiErrorMessage}
+        onDismissError={onDismissApiError}
+      />
 
-          {isSinglePhase && (
-            <div className="mt-6 border-t pt-6">
-              <PhaseForm
-                fieldPath="phases.0"
-                isSimplified={true}
-                isEditing={isEditing}
-                // Pasamos los setters explícitamente
-                onRewardSelect={setReward}
-                onQualifyConditionSelect={handleQualifyConditionSelect}
-                availableTimeframes={availableTimeframes}
-                phaseServerData={initialData?.phases?.[0]} // Pasar datos de fase en cascada
-              />
-            </div>
-          )}
+      <div className="space-y-4">
+        <PromotionBasicInfoForm
+          onSinglePhaseChange={handleSinglePhaseChange}
+          onNameChange={handleNameChange}
+          onDescriptionChange={handleDescriptionChange}
+          serverData={initialData}
+        />
+
+        {isSinglePhase && (
+          <div className="mt-6 border-t pt-6">
+            <PhaseForm
+              phaseIndex={0}
+              isSimplified
+              isEditing={isEditing}
+              onRewardSelect={handleRewardSelect}
+              onQualifyConditionSelect={handleQualifyConditionSelect}
+              availableQualifyConditions={
+                initialData?.availableQualifyConditions
+              }
+              anchorCatalog={anchorCatalog}
+              anchorOccurrences={anchorOccurrences}
+              phaseServerData={initialData?.phases?.[0]}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Fases Múltiples */}
       {!isSinglePhase && (
         <div className="space-y-4">
           <div className="flex flex-row items-center justify-between">
-            <TypographyH2>Fases de la Promoción</TypographyH2>
+            <TypographyH2>Fases de la promoción</TypographyH2>
             <Button type="button" variant="outline" onClick={addPhase}>
-              + Añadir Fase
+              + Añadir fase
             </Button>
           </div>
+
           <div className="space-y-4">
             {shouldShowTabs ? (
-              <Tabs defaultValue="0" onValueChange={handlePhaseTabChange}>
+              <Tabs
+                value={activePhaseIndex.toString()}
+                onValueChange={handlePhaseTabChange}
+              >
                 <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
                   {phasesFieldArray.fields.map((_, index) => (
-                    <TabsTrigger key={index} value={index.toString()}>Fase {index + 1}</TabsTrigger>
+                    <TabsTrigger key={index} value={index.toString()}>
+                      Fase {index + 1}
+                    </TabsTrigger>
                   ))}
                 </TabsList>
+
                 {phasesFieldArray.fields.map((field, index) => (
                   <TabsContent key={field.id} value={index.toString()}>
                     <PhaseForm
-                      fieldPath={`phases.${index}`}
-                      onRemove={phasesFieldArray.fields.length > 1 ? () => removePhase(index) : undefined}
+                      phaseIndex={index}
+                      onRemove={
+                        canRemovePhase(index)
+                          ? () => removePhase(index)
+                          : undefined
+                      }
+                      removeDisabledReason={getPhaseRemoveDisabledReason(index)}
                       isEditing={isEditing}
-                      // Pasamos los setters explícitamente
-                      onRewardSelect={setReward}
+                      onRewardSelect={handleRewardSelect}
                       onQualifyConditionSelect={handleQualifyConditionSelect}
-                      availableTimeframes={availableTimeframes}
-                      phaseServerData={initialData?.phases?.[index]} // Pasar datos de fase en cascada
+                      availableQualifyConditions={
+                        initialData?.availableQualifyConditions
+                      }
+                      anchorCatalog={anchorCatalog}
+                      anchorOccurrences={anchorOccurrences}
+                      phaseServerData={initialData?.phases?.[index]}
                     />
                   </TabsContent>
                 ))}
@@ -161,14 +279,22 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
               phasesFieldArray.fields.map((field, index) => (
                 <div key={field.id}>
                   <PhaseForm
-                    fieldPath={`phases.${index}`}
-                    onRemove={phasesFieldArray.fields.length > 1 ? () => removePhase(index) : undefined}
+                    phaseIndex={index}
+                    onRemove={
+                      canRemovePhase(index)
+                        ? () => removePhase(index)
+                        : undefined
+                    }
+                    removeDisabledReason={getPhaseRemoveDisabledReason(index)}
                     isEditing={isEditing}
-                    // Pasamos los setters explícitamente
-                    onRewardSelect={setReward}
+                    onRewardSelect={handleRewardSelect}
                     onQualifyConditionSelect={handleQualifyConditionSelect}
-                    availableTimeframes={availableTimeframes}
-                    phaseServerData={initialData?.phases?.[index]} // Pasar datos de fase en cascada
+                    availableQualifyConditions={
+                      initialData?.availableQualifyConditions
+                    }
+                    anchorCatalog={anchorCatalog}
+                    anchorOccurrences={anchorOccurrences}
+                    phaseServerData={initialData?.phases?.[index]}
                   />
                 </div>
               ))
@@ -177,29 +303,27 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
         </div>
       )}
 
-      {/* Sticky Action Bar */}
       <FormActionBar
         onDiscard={resetFormToDefaults}
         isLoading={isLoading}
         showBackButton={showBackButton}
         backHref={backHref}
         backToLabel={backToLabel}
-        saveLabel="Guardar"
+        saveLabel={isEditing ? "Actualizar promoción" : "Registrar Promoción"}
         discardLabel="Descartar"
       />
 
       <ConfirmDialog
         open={showConfirmDialog}
-        onOpenChange={setShowConfirmDialog}
+        onOpenChange={handleConfirmDialogOpenChange}
         title="Cambiar a fase única"
-        description="Se eliminarán las fases adicionales. ¿Continuar?"
-        confirmText="Sí"
+        description="Se eliminaran las fases adicionales. Continuar?"
+        confirmText="Si"
         cancelText="Cancelar"
         onConfirm={handleConfirmToggle}
       />
 
-      {/* Deposit Qualify Modal - for tracking deposits */}
-      {conditionPath && conditionServerData?.type === 'DEPOSIT' && (
+      {conditionPath && conditionServerData?.type === "DEPOSIT" && (
         <DepositQualifyModal
           isOpen={isDepositModalOpen}
           onClose={closeDepositModal}
@@ -211,11 +335,8 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
   );
 };
 
-// 2. COMPONENTE CONTENEDOR (Inicializa el contexto)
 export const PromotionForm: React.FC<PromotionFormProps> = (props) => {
-  // Factory Hook: Crea el objeto form
   const form = usePromotionForm(props.initialData);
-
 
   return (
     <FormProvider {...form}>

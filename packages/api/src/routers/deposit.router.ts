@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { 
   DepositSchema, 
+  DeleteDepositResultSchema,
   DepositEntitySchema, 
   UpdateDepositInputSchema,
   DepositListInputSchema,
@@ -65,8 +66,10 @@ export const depositRouter = router({
   /**
    * Delete a deposit
    */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    await ctx.depositService.delete(input.id);
-    return { success: true };
-  }),
+  delete: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .output(DeleteDepositResultSchema)
+    .mutation(async ({ ctx, input }) => {
+      return ctx.depositService.delete(input.id);
+    }),
 });

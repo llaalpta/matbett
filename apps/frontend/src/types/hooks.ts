@@ -4,8 +4,8 @@
 // TIPOS PARA HOOKS
 // =============================================
 
+import type { AnchorCatalog, AnchorOccurrences } from "@matbett/shared";
 import type { UseFormReturn, UseFieldArrayReturn } from "react-hook-form";
-import type { AvailableTimeframes } from "@matbett/shared";
 
 import type { RouterInputs, RouterOutputs } from "@/lib/trpc";
 
@@ -95,57 +95,18 @@ export type UsePromotionLogicReturn = {
   // Business Logic State
   isSinglePhase: boolean;
   hasDataInAdditionalPhases: () => boolean;
+  canRemovePhase: (index: number) => boolean;
+  getPhaseRemoveDisabledReason: (index: number) => string | undefined;
 
   // Actions
-  handleCardinalityChange: (value: string) => void;
+  handleCardinalityChange: (value: PromotionFormData["cardinality"]) => void;
   removeAdditionalPhases: () => void;
   resetFormToDefaults: () => void;
-  // calculateRelativeEndDate: (start: string | Date, days: number) => string; // Eliminado
 
-  // UI Tracking State
-  trackingState: {
-    promotionId?: string;
-    phaseId?: string;
-    phaseIndex?: number;
-    rewardId?: string;
-    rewardIndex?: number;
-    qualifyConditionId?: string;
-    qualifyConditionIndex?: number;
-  };
-
-  // Setters de UI (básicos)
-  setPhase: (id: string, index: number) => void;
-  setReward: (id: string, index: number) => void;
-  setQualifyCondition: (id: string, index: number) => void;
-
-  // Paths Helpers
-  getQualifyConditionPath: () => string | null;
-  getRewardPath: () => string | null;
-  getPhasePath: () => string | null;
-
-  // Data reference
-  serverData?: PromotionServerModel;
-  availableTimeframes?: AvailableTimeframes;
-
-  // Helpers de Extracción de ServerData
-  getPhaseServerData: () => PhaseServerModel | undefined;
-  getRewardServerData: () => RewardServerModel | undefined;
-  getConditionServerData: () => RewardQualifyConditionServerModel | undefined;
-
-  // Estado y Handlers de UI (Modals y Dialogs)
-  isDepositModalOpen: boolean;
-  openDepositModal: () => void;
-  closeDepositModal: () => void;
-  showConfirmDialog: boolean;
-  setShowConfirmDialog: (value: boolean) => void;
-
-  // Handlers UI Completos (Reutilizables)
-  handleQualifyConditionSelect: (id: string, index: number) => void;
-  handlePhaseTabChange: (value: string) => void;
-  handleSinglePhaseToggle: (value: string) => void;
-  handleConfirmToggle: () => void;
-  handleFormSubmit: (data: PromotionFormData) => PromotionFormData;
+  anchorCatalog?: AnchorCatalog;
+  anchorOccurrences?: AnchorOccurrences;
   handleNameChange: (value: string | number | undefined) => void;
   handleDescriptionChange: (value: string | undefined) => void;
-  // ❌ handleQualifyConditionValueTypeChange eliminado - ahora en useQualifyConditionLogic
 };
+
+

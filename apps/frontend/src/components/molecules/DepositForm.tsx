@@ -2,21 +2,25 @@
 
 import { bookmakerOptions } from "@matbett/shared";
 import type { Deposit } from "@matbett/shared";
-import React from "react";
-import { FormProvider } from "react-hook-form";
+import React, { useCallback } from "react";
+import { FormProvider, type SubmitHandler } from "react-hook-form";
 
 import { InputField, SelectField } from "@/components/atoms";
 import { DateTimeField } from "@/components/atoms/DateTimeField";
+import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import { useDepositForm } from "@/hooks/useDepositForm";
+import { useFormInvalidSubmitFocus } from "@/hooks/useFormInvalidSubmitFocus";
 
 type DepositFormData = Deposit;
 
 interface DepositFormProps {
-  onSubmit: (data: DepositFormData) => void | Promise<void>;
+  onSubmit: SubmitHandler<DepositFormData>;
   initialData?: Partial<DepositFormData>;
   isLoading?: boolean;
   onValueChange?: (amount: number) => void;
+  apiErrorMessage?: string | null;
+  onDismissApiError?: () => void;
   showSubmitButton?: boolean;
 }
 
@@ -25,20 +29,44 @@ export const DepositForm: React.FC<DepositFormProps> = ({
   initialData,
   isLoading = false,
   onValueChange,
+  apiErrorMessage,
+  onDismissApiError,
   showSubmitButton = true,
 }) => {
-  const { formMethods, handleAmountChange, isValid } = useDepositForm({
+  const { formMethods } = useDepositForm({
     initialData,
-    onValueChange,
   });
+  const { formRef, validationBannerRef, focusFirstInvalidField } =
+    useFormInvalidSubmitFocus();
 
-  // Handler de submit agnóstico - usa onSubmit pasado como prop
-  const handleSubmit = formMethods.handleSubmit(onSubmit);
+  const handleAmountChange = useCallback(
+    (value: number | undefined | string) => {
+      if (!onValueChange || typeof value !== "number") {
+        return;
+      }
+      onValueChange(value || 0);
+    },
+    [onValueChange]
+  );
+
+  const handleSubmit = formMethods.handleSubmit(onSubmit, focusFirstInvalidField);
 
   return (
     <FormProvider {...formMethods}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <InputField
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+        <ValidationErrorBanner<DepositFormData>
+          errors={formMethods.formState.errors}
+          submitCount={formMethods.formState.submitCount}
+          containerRef={validationBannerRef}
+          mode="generic"
+          onDismiss={() => formMethods.clearErrors()}
+        />
+        <ApiErrorBanner
+          errorMessage={apiErrorMessage}
+          onDismissError={onDismissApiError}
+        />
+
+        <InputField<DepositFormData>
           control={formMethods.control}
           name="amount"
           label="Cantidad"
@@ -47,7 +75,7 @@ export const DepositForm: React.FC<DepositFormProps> = ({
           onValueChange={handleAmountChange}
         />
 
-        <SelectField
+        <SelectField<DepositFormData>
           control={formMethods.control}
           name="bookmaker"
           label="Casa de Apuestas"
@@ -55,28 +83,24 @@ export const DepositForm: React.FC<DepositFormProps> = ({
           placeholder="Selecciona una casa"
         />
 
-        <DateTimeField
+        <DateTimeField<DepositFormData>
           control={formMethods.control}
           name="date"
           label="Fecha y Hora"
         />
 
-        <InputField
+        <InputField<DepositFormData>
           control={formMethods.control}
           name="code"
-          label="Código Promocional (opcional)"
+          label="Codigo Promocional (opcional)"
           placeholder="ej: WELCOME100"
         />
 
-        {showSubmitButton && (
-          <Button
-            type="submit"
-            disabled={!isValid || isLoading}
-            className="w-full"
-          >
-            {isLoading ? "Guardando..." : "Registrar Depósito"}
+        {showSubmitButton ? (
+          <Button type="submit" disabled={isLoading} className="w-full">
+            {isLoading ? "Guardando..." : "Registrar Deposito"}
           </Button>
-        )}
+        ) : null}
       </form>
     </FormProvider>
   );

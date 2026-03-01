@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface CheckboxOption {
@@ -55,7 +56,12 @@ export function CheckboxGroup<
         control={control}
         name={name}
         render={({ field, fieldState, formState }) => {
-          const value = (field.value as string[]) || [];
+          const rawValue: unknown = field.value;
+          const value = Array.isArray(rawValue)
+            ? rawValue.filter(
+                (item: unknown): item is string => typeof item === "string"
+              )
+            : [];
 
           // Para grupos: está "vacío" si el array tiene 0 elementos
           const isEmpty = value.length === 0;
@@ -98,7 +104,7 @@ export function CheckboxGroup<
                       <Checkbox
                         checked={value.includes(option.value)}
                         onCheckedChange={(checked) =>
-                          handleChange(option.value, checked as boolean)
+                          handleChange(option.value, checked === true)
                         }
                         disabled={disabled}
                       />

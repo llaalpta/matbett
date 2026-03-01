@@ -1,8 +1,8 @@
-/**
+﻿/**
  * Promotion Repository
  *
  * Maneja el acceso a datos de promociones con Prisma.
- * Proporciona métodos CRUD con soporte para paginación, filtrado y ordenamiento.
+ * Proporciona metodos CRUD con soporte para paginacion, filtrado y ordenamiento.
  */
 
 import type { Prisma, Promotion } from '@prisma/client';
@@ -14,12 +14,32 @@ import { prisma } from '@/lib/prisma';
  */
 export type PromotionWithRelations = Prisma.PromotionGetPayload<{
   include: {
+    availableQualifyConditions: {
+      include: {
+        _count: {
+          select: {
+            rewards: true;
+            deposits: true;
+            bets: true;
+          };
+        };
+      };
+    };
     phases: {
       include: {
-        availableQualifyConditions: true;
         rewards: {
           include: {
-            qualifyConditions: true;
+            qualifyConditions: {
+              include: {
+                _count: {
+                  select: {
+                    rewards: true;
+                    deposits: true;
+                    bets: true;
+                  };
+                };
+              };
+            };
             usageTracking: true;
           };
         };
@@ -29,7 +49,7 @@ export type PromotionWithRelations = Prisma.PromotionGetPayload<{
 }>;
 
 /**
- * Parámetros para findMany
+ * Parametros para findMany
  */
 export interface FindManyParams {
   where?: Prisma.PromotionWhereInput;
@@ -45,10 +65,33 @@ export interface FindManyParams {
  * Abstrae las queries de Prisma y proporciona una interfaz limpia para el servicio.
  */
 export class PromotionRepository {
+  async findAvailableQualifyConditionsByPromotionId(
+    promotionId: string
+  ): Promise<PromotionWithRelations['availableQualifyConditions'] | null> {
+    const promotion = await prisma.promotion.findUnique({
+      where: { id: promotionId },
+      select: {
+        availableQualifyConditions: {
+          include: {
+            _count: {
+              select: {
+                rewards: true,
+                deposits: true,
+                bets: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return promotion?.availableQualifyConditions ?? null;
+  }
+
   /**
-   * Lista promociones con filtros, ordenamiento y paginación
+   * Lista promociones con filtros, ordenamiento y paginacion
    *
-   * @param params - Parámetros de query (where, orderBy, skip, take)
+   * @param params - Parametros de query (where, orderBy, skip, take)
    * @returns Array de promociones con todas sus relaciones
    *
    * @example
@@ -61,9 +104,12 @@ export class PromotionRepository {
    * });
    * ```
    */
-  async findMany(params: FindManyParams = {}, tx?: Prisma.TransactionClient): Promise<PromotionWithRelations[]> {
+  async findMany(
+    params: FindManyParams = {},
+    tx?: Prisma.TransactionClient
+  ): Promise<PromotionWithRelations[]> {
     const { where, orderBy, skip, take } = params;
-    const client = tx ? tx.promotion : prisma.promotion; // Use transaction client if provided
+    const client = tx ? tx.promotion : prisma.promotion;
 
     return client.findMany({
       where,
@@ -71,13 +117,33 @@ export class PromotionRepository {
       skip,
       take,
       include: {
+        availableQualifyConditions: {
+          include: {
+            _count: {
+              select: {
+                rewards: true,
+                deposits: true,
+                bets: true,
+              },
+            },
+          },
+        },
         phases: {
           orderBy: { createdAt: 'asc' },
           include: {
-            availableQualifyConditions: true,
             rewards: {
               include: {
-                qualifyConditions: true,
+                qualifyConditions: {
+                  include: {
+                    _count: {
+                      select: {
+                        rewards: true,
+                        deposits: true,
+                        bets: true,
+                      },
+                    },
+                  },
+                },
                 usageTracking: true,
               },
             },
@@ -88,10 +154,10 @@ export class PromotionRepository {
   }
 
   /**
-   * Cuenta el número total de promociones que coinciden con los filtros
+   * Cuenta el numero total de promociones que coinciden con los filtros
    *
-   * @param params - Parámetros de filtrado
-   * @returns Número de promociones
+   * @param params - Parametros de filtrado
+   * @returns Numero de promociones
    *
    * @example
    * ```typescript
@@ -100,30 +166,53 @@ export class PromotionRepository {
    * });
    * ```
    */
-  async count(params: { where?: Prisma.PromotionWhereInput } = {}, tx?: Prisma.TransactionClient): Promise<number> {
+  async count(
+    params: { where?: Prisma.PromotionWhereInput } = {},
+    tx?: Prisma.TransactionClient
+  ): Promise<number> {
     const { where } = params;
-    const client = tx ? tx.promotion : prisma.promotion; // Use transaction client if provided
+    const client = tx ? tx.promotion : prisma.promotion;
 
     return client.count({ where });
   }
 
   /**
-   * Obtiene una promoción por ID con todas sus relaciones
+   * Obtiene una promocion por ID con todas sus relaciones
    *
-   * @param id - ID de la promoción
-   * @returns Promoción con relaciones o null si no existe
+   * @param id - ID de la promocion
+   * @returns Promocion con relaciones o null si no existe
    */
   async findById(id: string): Promise<PromotionWithRelations | null> {
     return prisma.promotion.findUnique({
       where: { id },
       include: {
+        availableQualifyConditions: {
+          include: {
+            _count: {
+              select: {
+                rewards: true,
+                deposits: true,
+                bets: true,
+              },
+            },
+          },
+        },
         phases: {
           orderBy: { createdAt: 'asc' },
           include: {
-            availableQualifyConditions: true,
             rewards: {
               include: {
-                qualifyConditions: true,
+                qualifyConditions: {
+                  include: {
+                    _count: {
+                      select: {
+                        rewards: true,
+                        deposits: true,
+                        bets: true,
+                      },
+                    },
+                  },
+                },
                 usageTracking: true,
               },
             },
@@ -134,10 +223,10 @@ export class PromotionRepository {
   }
 
   /**
-   * Crea una promoción con sus fases y rewards anidados
+   * Crea una promocion con sus fases y rewards anidados
    *
-   * @param data - Datos de la promoción a crear
-   * @returns Promoción creada con todas sus relaciones
+   * @param data - Datos de la promocion a crear
+   * @returns Promocion creada con todas sus relaciones
    *
    * @example
    * ```typescript
@@ -154,12 +243,32 @@ export class PromotionRepository {
     return prisma.promotion.create({
       data,
       include: {
+        availableQualifyConditions: {
+          include: {
+            _count: {
+              select: {
+                rewards: true,
+                deposits: true,
+                bets: true,
+              },
+            },
+          },
+        },
         phases: {
           include: {
-            availableQualifyConditions: true,
             rewards: {
               include: {
-                qualifyConditions: true,
+                qualifyConditions: {
+                  include: {
+                    _count: {
+                      select: {
+                        rewards: true,
+                        deposits: true,
+                        bets: true,
+                      },
+                    },
+                  },
+                },
                 usageTracking: true,
               },
             },
@@ -170,23 +279,43 @@ export class PromotionRepository {
   }
 
   /**
-   * Actualiza una promoción existente
+   * Actualiza una promocion existente
    *
-   * @param id - ID de la promoción a actualizar
+   * @param id - ID de la promocion a actualizar
    * @param data - Datos a actualizar
-   * @returns Promoción actualizada con relaciones
+   * @returns Promocion actualizada con relaciones
    */
   async update(id: string, data: Prisma.PromotionUpdateInput): Promise<PromotionWithRelations> {
     return prisma.promotion.update({
       where: { id },
       data,
       include: {
+        availableQualifyConditions: {
+          include: {
+            _count: {
+              select: {
+                rewards: true,
+                deposits: true,
+                bets: true,
+              },
+            },
+          },
+        },
         phases: {
           include: {
-            availableQualifyConditions: true,
             rewards: {
               include: {
-                qualifyConditions: true,
+                qualifyConditions: {
+                  include: {
+                    _count: {
+                      select: {
+                        rewards: true,
+                        deposits: true,
+                        bets: true,
+                      },
+                    },
+                  },
+                },
                 usageTracking: true,
               },
             },
@@ -197,10 +326,10 @@ export class PromotionRepository {
   }
 
   /**
-   * Elimina una promoción
+   * Elimina una promocion
    *
-   * @param id - ID de la promoción a eliminar
-   * @returns Promoción eliminada
+   * @param id - ID de la promocion a eliminar
+   * @returns Promocion eliminada
    */
   async delete(id: string): Promise<Promotion> {
     return prisma.promotion.delete({

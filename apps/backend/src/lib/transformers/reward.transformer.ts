@@ -1,6 +1,4 @@
 import { Prisma } from '@prisma/client';
-import { createId } from '@paralleldrive/cuid2';
-import stringify from 'fast-json-stable-stringify';
 import type {
   Reward,
   RewardEntity,
@@ -8,71 +6,124 @@ import type {
 } from '@matbett/shared';
 import {
   RewardStatusSchema,
+  RewardValueTypeSchema,
+  ActivationMethodSchema,
+  ClaimMethodSchema,
+  QualifyConditionStatusSchema,
   TimeframeSchema,
   DepositConditionsSchema,
   BetConditionsSpecificSchema,
   LossesCashbackConditionsSchema,
-  FreeBetUsageConditionsSchema,
-  BonusRolloverUsageConditionsSchema,
-  BonusNoRolloverUsageConditionsSchema,
-  CashbackUsageConditionsSchema,
-  EnhancedOddsUsageConditionsSchema,
-  CasinoSpinsUsageConditionsSchema,
-  FreeBetTypeSpecificFieldsSchema,
 } from '@matbett/shared';
 import {
   Reward as PrismaReward,
   RewardQualifyCondition as PrismaRewardQualifyCondition,
   RewardUsageTracking as PrismaRewardUsageTracking,
 } from '@prisma/client';
+import { toInputJson } from '@/utils/prisma-json';
+import {
+  parseTypeSpecificFieldsByRewardType,
+  parseUsageConditionsByRewardType,
+} from './reward-shared.transformer';
 
-// Helper para tipos JSON
-function toJson(data: object): Prisma.InputJsonValue {
-  return data as Prisma.InputJsonValue;
-}
+type PrismaQualifyConditionWithCounts = PrismaRewardQualifyCondition & {
+  _count?: {
+    rewards: number;
+    deposits: number;
+    bets: number;
+  };
+};
 
-// Importar la función compartida desde qualify-condition.transformer
-import { extractQualifyConditions } from './qualify-condition.transformer';
-
-// Helper para extraer campos específicos por tipo
-function extractTypeSpecificFields(reward: Reward): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
-  if (reward.type === 'FREEBET' && 'typeSpecificFields' in reward && reward.typeSpecificFields) {
-    return toJson(reward.typeSpecificFields);
-  }
-  return Prisma.DbNull;
-}
-
-// Helper para extraer condiciones de uso específicas
-function extractUsageConditions(reward: Reward): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
-  if (!reward.usageConditions) return Prisma.DbNull;
-
-  switch (reward.usageConditions.type) {
-    case 'FREEBET': return toJson(reward.usageConditions);
-    case 'BET_BONUS_ROLLOVER': return toJson(reward.usageConditions);
-    case 'BET_BONUS_NO_ROLLOVER': return toJson(reward.usageConditions);
-    case 'CASHBACK_FREEBET': return toJson(reward.usageConditions);
-    case 'ENHANCED_ODDS': return toJson(reward.usageConditions);
-    case 'CASINO_SPINS': return toJson(reward.usageConditions);
+function getRewardStatusDate(status: string, dates: {
+  qualifyConditionsFulfilledAt?: Date | null;
+  claimedAt?: Date | null;
+  receivedAt?: Date | null;
+  useStartedAt?: Date | null;
+  useCompletedAt?: Date | null;
+  expiredAt?: Date | null;
+  createdAt: Date;
+}): Date {
+  switch (status) {
+    case "PENDING_TO_CLAIM":
+      return dates.qualifyConditionsFulfilledAt ?? dates.createdAt;
+    case "CLAIMED":
+      return dates.claimedAt ?? dates.createdAt;
+    case "RECEIVED":
+      return dates.receivedAt ?? dates.createdAt;
+    case "IN_USE":
+      return dates.useStartedAt ?? dates.createdAt;
+    case "USED":
+      return dates.useCompletedAt ?? dates.createdAt;
+    case "EXPIRED":
+      return dates.expiredAt ?? dates.createdAt;
     default:
-      const _exhaustiveCheck: never = reward.usageConditions;
-      throw new Error(`[Transformer Error] Usage Condition Type not handled: ${(_exhaustiveCheck as any).type}`);
+      return dates.createdAt;
   }
 }
 
-// Helper para reconstruir entidad de condición de calificación
-export function toQualifyConditionEntity(prismaCondition: PrismaRewardQualifyCondition): QualifyConditionEntity {
+function getQualifyConditionStatusDate(status: string, dates: {
+  startedAt?: Date | null;
+  qualifiedAt?: Date | null;
+  failedAt?: Date | null;
+  expiredAt?: Date | null;
+  createdAt: Date;
+}): Date {
+  switch (status) {
+    case "QUALIFYING":
+      return dates.startedAt ?? dates.createdAt;
+    case "FULFILLED":
+      return dates.qualifiedAt ?? dates.createdAt;
+    case "FAILED":
+      return dates.failedAt ?? dates.createdAt;
+    case "EXPIRED":
+      return dates.expiredAt ?? dates.createdAt;
+    default:
+      return dates.createdAt;
+  }
+}
+
+// Helper para extraer condiciones de uso especificas
+function extractUsageConditions(
+  usageConditions: Reward['usageConditions'] | null | undefined
+): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
+  if (!usageConditions) {return Prisma.DbNull;}
+
+  switch (usageConditions.type) {
+    case 'FREEBET': return toInputJson(usageConditions);
+    case 'BET_BONUS_ROLLOVER': return toInputJson(usageConditions);
+    case 'BET_BONUS_NO_ROLLOVER': return toInputJson(usageConditions);
+    case 'CASHBACK_FREEBET': return toInputJson(usageConditions);
+    case 'ENHANCED_ODDS': return toInputJson(usageConditions);
+    case 'CASINO_SPINS': return toInputJson(usageConditions);
+    default:
+      throw new Error('[Transformer Error] Usage Condition Type not handled');
+  }
+}
+
+// Helper para reconstruir entidad de condicion de calificacion
+export function toQualifyConditionEntity(prismaCondition: PrismaQualifyConditionWithCounts): QualifyConditionEntity {
   const timeframe = TimeframeSchema.parse(prismaCondition.timeframe);
+  const hasRewards = (prismaCondition._count?.rewards ?? 0) > 0;
+  const hasDeposits = (prismaCondition._count?.deposits ?? 0) > 0;
+  const hasBets = (prismaCondition._count?.bets ?? 0) > 0;
+  const canDelete = !(hasRewards || hasDeposits || hasBets);
 
   const baseFields = {
     id: prismaCondition.id,
     type: prismaCondition.type,
     description: prismaCondition.description ?? undefined,
-    status: RewardStatusSchema.parse(prismaCondition.status), // Reutilizamos status de Reward
-    // ❌ contributesToRewardValue eliminado - ahora solo existe dentro de conditions como discriminador
+    status: QualifyConditionStatusSchema.parse(prismaCondition.status),
+    statusDate: getQualifyConditionStatusDate(prismaCondition.status, {
+      startedAt: prismaCondition.startedAt,
+      qualifiedAt: prismaCondition.qualifiedAt,
+      failedAt: prismaCondition.failedAt,
+      expiredAt: prismaCondition.expiredAt,
+      createdAt: prismaCondition.createdAt,
+    }),
+    canDelete,
     timeframe: timeframe,
     balance: prismaCondition.balance,
-    phaseId: prismaCondition.phaseId,
-    dependsOnQualifyConditionId: prismaCondition.dependsOnQualifyConditionId ?? undefined,
+    promotionId: prismaCondition.promotionId,
     startedAt: prismaCondition.startedAt ?? null,
     qualifiedAt: prismaCondition.qualifiedAt ?? null,
     failedAt: prismaCondition.failedAt ?? null,
@@ -82,27 +133,33 @@ export function toQualifyConditionEntity(prismaCondition: PrismaRewardQualifyCon
   };
 
   switch (prismaCondition.type) {
-    case 'DEPOSIT':
+    case 'DEPOSIT': {
+      const conditions = DepositConditionsSchema.parse(prismaCondition.conditions);
       return {
         ...baseFields,
         type: 'DEPOSIT',
-        conditions: DepositConditionsSchema.parse(prismaCondition.conditions),
-        tracking: null, // Tracking no está disponible en este contexto (solo en promotion transformer)
+        conditions,
+        tracking: null, // Tracking no esta disponible en este contexto (solo en promotion transformer)
       };
-    case 'BET':
+    }
+    case 'BET': {
+      const conditions = BetConditionsSpecificSchema.parse(prismaCondition.conditions);
       return {
         ...baseFields,
         type: 'BET',
-        conditions: BetConditionsSpecificSchema.parse(prismaCondition.conditions),
+        conditions,
         tracking: null,
       };
-    case 'LOSSES_CASHBACK':
+    }
+    case 'LOSSES_CASHBACK': {
+      const conditions = LossesCashbackConditionsSchema.parse(prismaCondition.conditions);
       return {
         ...baseFields,
         type: 'LOSSES_CASHBACK',
-        conditions: LossesCashbackConditionsSchema.parse(prismaCondition.conditions),
+        conditions,
         tracking: null,
       };
+    }
     default:
       throw new Error(`Tipo de QualifyCondition no soportado: ${prismaCondition.type}`);
   }
@@ -111,7 +168,7 @@ export function toQualifyConditionEntity(prismaCondition: PrismaRewardQualifyCon
 // Helper para reconstruir entidad de recompensa
 export function toRewardEntity(
   prismaReward: PrismaReward & {
-    qualifyConditions: PrismaRewardQualifyCondition[];
+    qualifyConditions: PrismaQualifyConditionWithCounts[];
     usageTracking?: PrismaRewardUsageTracking | null;
     phase?: { promotionId: string }; // Opcional: solo viene en consultas standalone
   }
@@ -123,15 +180,27 @@ export function toRewardEntity(
     id: prismaReward.id,
     type: prismaReward.type,
     value: prismaReward.value,
-    valueType: prismaReward.valueType,
-    activationMethod: prismaReward.activationMethod,
-    claimMethod: prismaReward.claimMethod,
+    valueType: RewardValueTypeSchema.parse(prismaReward.valueType),
+    activationMethod: ActivationMethodSchema.parse(prismaReward.activationMethod),
+    claimMethod: ClaimMethodSchema.parse(prismaReward.claimMethod),
+    activationRestrictions: prismaReward.activationRestrictions ?? undefined,
     claimRestrictions: prismaReward.claimRestrictions ?? undefined,
+    withdrawalRestrictions: prismaReward.withdrawalRestrictions ?? undefined,
     status,
+    statusDate: getRewardStatusDate(status, {
+      qualifyConditionsFulfilledAt: prismaReward.qualifyConditionsFulfilledAt,
+      claimedAt: prismaReward.claimedAt,
+      receivedAt: prismaReward.receivedAt,
+      useStartedAt: prismaReward.useStartedAt,
+      useCompletedAt: prismaReward.useCompletedAt,
+      expiredAt: prismaReward.expiredAt,
+      createdAt: prismaReward.createdAt,
+    }),
+    canDelete: qualifyConditions.length === 0,
     qualifyConditions,
     totalBalance: prismaReward.totalBalance,
     phaseId: prismaReward.phaseId,
-    promotionId: prismaReward.phase?.promotionId, // Incluir si viene de consulta standalone
+    promotionId: prismaReward.promotionId,
     qualifyConditionsFulfilledAt: prismaReward.qualifyConditionsFulfilledAt ?? null,
     claimedAt: prismaReward.claimedAt ?? null,
     receivedAt: prismaReward.receivedAt ?? null,
@@ -150,50 +219,66 @@ export function toRewardEntity(
       return {
         ...baseFields,
         type: 'FREEBET',
-        typeSpecificFields: prismaReward.typeSpecificFields
-          ? FreeBetTypeSpecificFieldsSchema.parse(prismaReward.typeSpecificFields)
-          : { stakeNotReturned: true }, // Default si no existe
-        usageConditions: FreeBetUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'FREEBET',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('FREEBET', usageConditionsData),
         usageTracking: null
       };
     case 'BET_BONUS_ROLLOVER':
       return {
         ...baseFields,
         type: 'BET_BONUS_ROLLOVER',
-        typeSpecificFields: null, // Sin campos específicos
-        usageConditions: BonusRolloverUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'BET_BONUS_ROLLOVER',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('BET_BONUS_ROLLOVER', usageConditionsData),
         usageTracking: null
       };
     case 'BET_BONUS_NO_ROLLOVER':
       return {
         ...baseFields,
         type: 'BET_BONUS_NO_ROLLOVER',
-        typeSpecificFields: null, // Sin campos específicos
-        usageConditions: BonusNoRolloverUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'BET_BONUS_NO_ROLLOVER',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('BET_BONUS_NO_ROLLOVER', usageConditionsData),
         usageTracking: null
       };
     case 'CASHBACK_FREEBET':
       return {
         ...baseFields,
         type: 'CASHBACK_FREEBET',
-        typeSpecificFields: null, // Sin campos específicos
-        usageConditions: CashbackUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'CASHBACK_FREEBET',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('CASHBACK_FREEBET', usageConditionsData),
         usageTracking: null
       };
     case 'ENHANCED_ODDS':
       return {
         ...baseFields,
         type: 'ENHANCED_ODDS',
-        typeSpecificFields: null, // Sin campos específicos
-        usageConditions: EnhancedOddsUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'ENHANCED_ODDS',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('ENHANCED_ODDS', usageConditionsData),
         usageTracking: null
       };
     case 'CASINO_SPINS':
       return {
         ...baseFields,
         type: 'CASINO_SPINS',
-        typeSpecificFields: null, // Sin campos específicos
-        usageConditions: CasinoSpinsUsageConditionsSchema.parse(usageConditionsData),
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'CASINO_SPINS',
+          prismaReward.typeSpecificFields
+        ),
+        usageConditions: parseUsageConditionsByRewardType('CASINO_SPINS', usageConditionsData),
         usageTracking: null
       };
     default:
@@ -201,66 +286,25 @@ export function toRewardEntity(
   }
 }
 
-
-export function toRewardCreateInput(reward: Reward, phaseId: string): Prisma.RewardCreateInput {
-  const conditionHashToIdMap = new Map<string, string>();
-  const uniqueConditionsToCreate: Prisma.RewardQualifyConditionCreateWithoutRewardsInput[] = [];
-
-  for (const qc of reward.qualifyConditions) {
-    const hash = stringify(qc);
-    if (!conditionHashToIdMap.has(hash)) {
-      const newId = createId();
-      conditionHashToIdMap.set(hash, newId);
-      uniqueConditionsToCreate.push({
-        id: newId,
-        type: qc.type,
-        description: qc.description,
-        status: qc.status || 'PENDING',
-        // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions como discriminador
-        timeframe: toJson(qc.timeframe),
-        conditions: extractQualifyConditions(qc),
-        phase: { connect: { id: phaseId } }, // Qualify conditions belong to phase
-      });
-    }
-  }
-
-  return {
-    id: createId(), // Backend genera IDs
-    phase: { connect: { id: phaseId } }, // Se conecta a una fase existente
-    type: reward.type,
-    value: reward.value,
-    valueType: reward.valueType,
-    activationMethod: reward.activationMethod,
-    claimMethod: reward.claimMethod,
-    claimRestrictions: reward.claimRestrictions,
-    status: reward.status || 'QUALIFYING',
-    typeSpecificFields: extractTypeSpecificFields(reward),
-    usageConditions: extractUsageConditions(reward),
-    qualifyConditions: {
-      create: uniqueConditionsToCreate,
-    },
-    // No incluye totalBalance, lo calcula el sistema
-    // No incluye timestamps de estado, los setea el sistema
-  };
-}
-
 export function toRewardUpdateInput(reward: Partial<Reward>): Prisma.RewardUpdateInput {
   const updateInput: Prisma.RewardUpdateInput = {};
 
-  if (reward.type !== undefined) updateInput.type = reward.type;
-  if (reward.value !== undefined) updateInput.value = reward.value;
-  if (reward.valueType !== undefined) updateInput.valueType = reward.valueType;
-  if (reward.activationMethod !== undefined) updateInput.activationMethod = reward.activationMethod;
-  if (reward.claimMethod !== undefined) updateInput.claimMethod = reward.claimMethod;
-  if (reward.claimRestrictions !== undefined) updateInput.claimRestrictions = reward.claimRestrictions;
-  if (reward.status !== undefined) updateInput.status = reward.status;
+  if (reward.type !== undefined) {updateInput.type = reward.type;}
+  if (reward.value !== undefined) {updateInput.value = reward.value;}
+  if (reward.valueType !== undefined) {updateInput.valueType = reward.valueType;}
+  if (reward.activationMethod !== undefined) {updateInput.activationMethod = reward.activationMethod;}
+  if (reward.claimMethod !== undefined) {updateInput.claimMethod = reward.claimMethod;}
+  if (reward.activationRestrictions !== undefined) {updateInput.activationRestrictions = reward.activationRestrictions;}
+  if (reward.claimRestrictions !== undefined) {updateInput.claimRestrictions = reward.claimRestrictions;}
+  if (reward.withdrawalRestrictions !== undefined) {updateInput.withdrawalRestrictions = reward.withdrawalRestrictions;}
+  if (reward.status !== undefined) {updateInput.status = reward.status;}
 
   // typeSpecificFields
   if ('typeSpecificFields' in reward) {
     if (reward.typeSpecificFields === null || reward.typeSpecificFields === undefined) {
       updateInput.typeSpecificFields = Prisma.DbNull;
     } else {
-      updateInput.typeSpecificFields = toJson(reward.typeSpecificFields);
+      updateInput.typeSpecificFields = toInputJson(reward.typeSpecificFields);
     }
   }
 
@@ -269,13 +313,12 @@ export function toRewardUpdateInput(reward: Partial<Reward>): Prisma.RewardUpdat
     if (reward.usageConditions === null) {
       updateInput.usageConditions = Prisma.DbNull;
     } else {
-      updateInput.usageConditions = extractUsageConditions(reward as Reward); // Castear a Reward para usar en extractUsageConditions
+      updateInput.usageConditions = extractUsageConditions(reward.usageConditions);
     }
   }
 
-  // Lógica para actualizar qualifyConditions: Crear/Actualizar/Eliminar
-  // Esto es muy complejo y similar a Promotion. Es un TODO importante si se necesita edición anidada
-  // Por ahora, solo actualizaremos las propiedades simples de Reward
+  // Nested qualifyConditions updates are handled in service layer.
 
   return updateInput;
 }
+

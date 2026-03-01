@@ -1,25 +1,22 @@
-"use client";
+﻿"use client";
 
 import {
-  bookmakerOptions,
   activationMethodOptions,
-  promotionStatusOptions,
+  bookmakerOptions,
   promotionCardinalityOptions,
-} from '@matbett/shared';
-import { useFormContext, Path } from "react-hook-form";
+  promotionStatusOptions,
+} from "@matbett/shared";
+import { useFormContext } from "react-hook-form";
 
+import { DateTimeField } from "@/components/atoms/DateTimeField";
 import { InputField } from "@/components/atoms/InputField";
 import { SelectField } from "@/components/atoms/SelectField";
 import { TextareaField } from "@/components/atoms/TextareaField";
-import { TypographyH2 } from "@/components/atoms/Typography";
+import { usePromotionStatusDateSync } from "@/hooks/useStatusDateSync";
 import type { PromotionFormData, PromotionServerModel } from "@/types/hooks";
-import { useStatusDateSync } from "@/hooks/useStatusDateSync";
-import { DateTimeField } from "@/components/atoms/DateTimeField";
-
-import { TimeframeForm } from "./TimeframeForm";
 
 interface PromotionBasicInfoFormProps {
-  onSinglePhaseChange?: (value: string) => void;
+  onSinglePhaseChange?: (value: PromotionFormData["cardinality"]) => void;
   onNameChange?: (value: string | number | undefined) => void;
   onDescriptionChange?: (value: string | undefined) => void;
   serverData?: PromotionServerModel;
@@ -31,27 +28,35 @@ export function PromotionBasicInfoForm({
   onDescriptionChange,
   serverData,
 }: PromotionBasicInfoFormProps) {
-  // 1. Obtener contexto
   const { control, setValue } = useFormContext<PromotionFormData>();
 
-  // 2. Sincronizar fecha de estado
-  useStatusDateSync({
+  usePromotionStatusDateSync({
     control,
     setValue,
-    statusPath: "status" as Path<PromotionFormData>,
-    datePath: "statusDate" as Path<PromotionFormData>,
-    serverDates: serverData,
+    statusPath: "status",
+    datePath: "statusDate",
+    serverDates: serverData
+      ? {
+          activatedAt: serverData.activatedAt ?? null,
+          completedAt: serverData.completedAt ?? null,
+          expiredAt: serverData.expiredAt ?? null,
+        }
+      : undefined,
   });
+
+  const handleSinglePhaseChange = (value: string) => {
+    if (value === "SINGLE" || value === "MULTIPLE") {
+      onSinglePhaseChange?.(value);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        
-        {/* Primeros 4 campos en grid 2x2 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <SelectField<PromotionFormData>
             name="bookmaker"
-            label="Casa de apuestas"
+            label="Casa de apuestas de la promoción (Bookmaker)"
             options={bookmakerOptions}
             required
           />
@@ -59,7 +64,7 @@ export function PromotionBasicInfoForm({
             name="cardinality"
             label="Tipo de promoción"
             options={promotionCardinalityOptions}
-            onValueChange={onSinglePhaseChange}
+            onValueChange={handleSinglePhaseChange}
             required
           />
           <SelectField<PromotionFormData>
@@ -75,13 +80,12 @@ export function PromotionBasicInfoForm({
             />
             <DateTimeField<PromotionFormData>
               name="statusDate"
-              label="Fecha del estado"
+              label="Fecha del cambio de estado"
               tooltip="Fecha en la que la promoción cambió a este estado"
             />
           </div>
         </div>
 
-        {/* Fila 2: Nombre */}
         <InputField<PromotionFormData>
           name="name"
           label="Nombre"
@@ -89,23 +93,27 @@ export function PromotionBasicInfoForm({
           required
         />
 
-        {/* Fila 3: Descripción */}
         <TextareaField<PromotionFormData>
           name="description"
           label="Descripción"
           rows={3}
           onValueChange={onDescriptionChange}
         />
-        
       </div>
-      
-      {/* TimeframeForm también usa contexto ahora */}
-      <TimeframeForm
-        basePath="timeframe"
-        title="Duración de la promoción"
-        forceAbsolute={true}
-        hideModeSelector={true}
-      />
+
+      <div className="space-y-2 rounded-md border border-border/40 bg-muted/20 p-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <DateTimeField<PromotionFormData>
+            name="timeframe.start"
+            label="Fecha de inicio de la promoción"
+            required
+          />
+          <DateTimeField<PromotionFormData>
+            name="timeframe.end"
+            label="Fecha de finalización de la promoción"
+          />
+        </div>
+      </div>
     </div>
   );
 }

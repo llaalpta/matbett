@@ -13,6 +13,7 @@ import { createContext } from './trpc/context';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const logInfo = (message: string) => process.stdout.write(`${message}\n`);
 
 // =============================================
 // MIDDLEWARE
@@ -32,7 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Request logger simple
 app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  logInfo(`${req.method} ${req.path}`);
   next();
 });
 
@@ -54,6 +55,6 @@ app.use(
 // =============================================
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`⚡ tRPC available at http://localhost:${PORT}/trpc`);
+  logInfo(`Server running on http://localhost:${PORT}`);
+  logInfo(`tRPC available at http://localhost:${PORT}/trpc`);
 });

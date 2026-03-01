@@ -6,8 +6,9 @@
 import { z } from 'zod';
 
 import { QualifyConditionStatusSchema, CashbackCalculationMethodSchema } from './enums';
-import { requiredNumber } from './utils';
+import { requiredInteger, requiredNumber } from './utils';
 import { TimeframeSchema } from './timeframe.schema';
+import { PaginationInputSchema } from './pagination.schema';
 import {
   OddsRestrictionSchema,
   StakeRestrictionSchema,
@@ -49,9 +50,9 @@ const QualifyConditionStateTimestampsSchema = z.object({
 const QualifyConditionEntityCommonFieldsSchema = z.object({
   id: z.string(),
   status: QualifyConditionStatusSchema,
-  phaseId: z.string(),
+  promotionId: z.string(),
+  canDelete: z.boolean(),
   balance: z.number(),
-  // ❌ contributesToRewardValue removido - solo existe dentro de conditions como discriminador
 });
 
 // =============================================
@@ -67,12 +68,14 @@ const QualifyConditionEntityCommonFieldsSchema = z.object({
  */
 const BaseQualifyConditionSchema = z.object({
   id: z.string().optional(),
+  clientId: z.string().uuid().optional(),
   description: z.string().nullish(),
-  otherRestrictions: z.string().nullish(),
-  dependsOnQualifyConditionId: z.string().nullish(),
   status: QualifyConditionStatusSchema.optional(),
-  statusDate: z.date().nullable().optional(), // Nueva propiedad para tracking histórico
+  statusDate: z.date(), // Nueva propiedad para tracking histórico
   timeframe: TimeframeSchema,
+}).refine((value) => Boolean(value.id || value.clientId), {
+  message: 'QualifyCondition requires id or clientId',
+  path: ['id'],
 });
 
 // =============================================
@@ -86,6 +89,7 @@ const BaseQualifyConditionSchema = z.object({
 const BaseDepositConditionsSchema = z.object({
   depositCode: z.string().optional(),
   firstDepositOnly: z.boolean().optional(),
+  otherRestrictions: z.string().optional(),
 });
 
 /**
@@ -95,7 +99,6 @@ const BaseDepositConditionsSchema = z.object({
 export const DepositConditionsFixedValueSchema = BaseDepositConditionsSchema.extend({
   contributesToRewardValue: z.literal(false),
   targetAmount: requiredNumber(0), // Depósito exacto requerido
-  // ❌ NO tiene minAmount, maxAmount, bonusPercentage, maxBonusAmount
 });
 
 /**
@@ -108,7 +111,6 @@ export const DepositConditionsCalculatedValueSchema = BaseDepositConditionsSchem
   maxAmount: z.number().min(0).optional(),
   bonusPercentage: requiredNumber(0),
   maxBonusAmount: requiredNumber(0),
-  // ❌ NO tiene targetAmount
 });
 
 /**
@@ -146,6 +148,7 @@ const BaseBetConditionsSchema = z.object({
   // Restricciones de texto libre
   betTypeRestrictions: z.string().optional(),
   selectionRestrictions: z.string().optional(),
+  otherRestrictions: z.string().optional(),
 });
 
 /**
@@ -154,8 +157,7 @@ const BaseBetConditionsSchema = z.object({
  */
 export const BetConditionsFixedValueSchema = BaseBetConditionsSchema.extend({
   contributesToRewardValue: z.literal(false),
-  targetStake: requiredNumber(0),
-  // ❌ NO tiene stakeRestriction, returnPercentage, maxRewardAmount
+  targetStake: requiredInteger(0),
 });
 
 /**
@@ -167,14 +169,17 @@ export const BetConditionsCalculatedValueSchema = BaseBetConditionsSchema.extend
 
   // Restricciones de stake (rango)
   stakeRestriction: z.object({
-    minStake: requiredNumber(0),
-    maxStake: z.number().min(0).optional(),
+    minStake: requiredInteger(0),
+    maxStake: z
+      .number()
+      .int('El stake máximo debe ser un número entero')
+      .min(0)
+      .optional(),
   }),
 
   // Cálculo del valor de la reward
   returnPercentage: requiredNumber(0),
   maxRewardAmount: requiredNumber(0),
-  // ❌ NO tiene targetStake
 });
 
 /**
@@ -191,11 +196,23 @@ export const BetConditionsSpecificSchema = z.discriminatedUnion('contributesToRe
  * APLANADO: Incluye campos de BetConditionsSchema directamente (opcionales)
  */
 export const LossesCashbackConditionsSchema = z.object({
-  cashbackPercentage: requiredNumber(0),
+  cashbackPercentage: z
+    .number()
+    .int('El porcentaje de cashback debe ser un numero entero')
+    .min(0, 'El porcentaje de cashback no puede ser menor que 0')
+    .max(100, 'El porcentaje de cashback no puede ser mayor que 100')
+    .optional()
+    .refine((val): val is number => val !== undefined, {
+      message: 'Este campo es obligatorio',
+    })
+    .transform((val) => val),
   maxCashbackAmount: requiredNumber(0),
   calculationMethod: CashbackCalculationMethodSchema,
   calculationPeriod: z.string().optional(),
-  
+  returnedBetsCountForCashback: z.boolean().optional(),
+  cashoutBetsCountForCashback: z.boolean().optional(),
+  countOnlySettledBets: z.boolean().optional(),
+
   // Campos aplanados de BetConditionsSchema (Opcionales para Cashback)
   oddsRestriction: OddsRestrictionSchema.optional(),
   stakeRestriction: StakeRestrictionSchema.optional(),
@@ -206,6 +223,7 @@ export const LossesCashbackConditionsSchema = z.object({
   betTypeRestrictions: z.string().optional(),
   selectionRestrictions: z.string().optional(),
   onlyFirstBetCounts: z.boolean().optional(),
+  otherRestrictions: z.string().optional(),
 });
 
 // =============================================
@@ -215,28 +233,25 @@ export const LossesCashbackConditionsSchema = z.object({
 /**
  * Schema de INPUT - Sin tracking (calculado por backend)
  */
-export const DepositQualifyConditionSchema = BaseQualifyConditionSchema.extend({
+export const DepositQualifyConditionSchema = BaseQualifyConditionSchema.safeExtend({
   type: z.literal('DEPOSIT'),
   conditions: DepositConditionsSchema,
-  // ❌ Sin tracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin tracking (calculado por backend)
  */
-export const BetQualifyConditionSchema = BaseQualifyConditionSchema.extend({
+export const BetQualifyConditionSchema = BaseQualifyConditionSchema.safeExtend({
   type: z.literal('BET'),
   conditions: BetConditionsSpecificSchema,
-  // ❌ Sin tracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin tracking (calculado por backend)
  */
-export const LossesCashbackQualifyConditionSchema = BaseQualifyConditionSchema.extend({
+export const LossesCashbackQualifyConditionSchema = BaseQualifyConditionSchema.safeExtend({
   type: z.literal('LOSSES_CASHBACK'),
   conditions: LossesCashbackConditionsSchema,
-  // ❌ Sin tracking - solo en EntitySchema
 });
 
 // =============================================
@@ -246,7 +261,7 @@ export const LossesCashbackQualifyConditionSchema = BaseQualifyConditionSchema.e
 /**
  * Schema de OUTPUT - Con tracking calculado por backend
  */
-export const DepositQualifyConditionEntitySchema = DepositQualifyConditionSchema.extend({
+export const DepositQualifyConditionEntitySchema = DepositQualifyConditionSchema.safeExtend({
   tracking: DepositQualifyTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...QualifyConditionEntityCommonFieldsSchema.shape,
   ...QualifyConditionStateTimestampsSchema.shape,
@@ -256,7 +271,7 @@ export const DepositQualifyConditionEntitySchema = DepositQualifyConditionSchema
 /**
  * Schema de OUTPUT - Con tracking calculado por backend
  */
-export const BetQualifyConditionEntitySchema = BetQualifyConditionSchema.extend({
+export const BetQualifyConditionEntitySchema = BetQualifyConditionSchema.safeExtend({
   tracking: BetQualifyTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...QualifyConditionEntityCommonFieldsSchema.shape,
   ...QualifyConditionStateTimestampsSchema.shape,
@@ -266,7 +281,7 @@ export const BetQualifyConditionEntitySchema = BetQualifyConditionSchema.extend(
 /**
  * Schema de OUTPUT - Con tracking calculado por backend
  */
-export const LossesCashbackQualifyConditionEntitySchema = LossesCashbackQualifyConditionSchema.extend({
+export const LossesCashbackQualifyConditionEntitySchema = LossesCashbackQualifyConditionSchema.safeExtend({
   tracking: LossesCashbackQualifyTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...QualifyConditionEntityCommonFieldsSchema.shape,
   ...QualifyConditionStateTimestampsSchema.shape,
@@ -288,6 +303,17 @@ export const QualifyConditionEntitySchema = z.union([
   BetQualifyConditionEntitySchema,
   LossesCashbackQualifyConditionEntitySchema,
 ]);
+
+export const UpdateQualifyConditionInputSchema = z.object({
+  id: z.string(),
+  data: QualifyConditionSchema,
+});
+
+export const QualifyConditionListInputSchema = PaginationInputSchema.extend({
+  status: QualifyConditionStatusSchema.optional(),
+  type: z.enum(['DEPOSIT', 'BET', 'LOSSES_CASHBACK']).optional(),
+  promotionId: z.string().optional(),
+});
 
 // =============================================
 // INFERRED TYPES
@@ -312,3 +338,6 @@ export type DepositQualifyConditionEntity = z.infer<typeof DepositQualifyConditi
 export type BetQualifyConditionEntity = z.infer<typeof BetQualifyConditionEntitySchema>;
 export type LossesCashbackQualifyConditionEntity = z.infer<typeof LossesCashbackQualifyConditionEntitySchema>;
 export type QualifyConditionEntity = z.infer<typeof QualifyConditionEntitySchema>;
+export type UpdateQualifyConditionInput = z.infer<typeof UpdateQualifyConditionInputSchema>;
+export type QualifyConditionListInput = z.infer<typeof QualifyConditionListInputSchema>;
+

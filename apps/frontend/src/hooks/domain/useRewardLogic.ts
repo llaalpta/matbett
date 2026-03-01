@@ -1,159 +1,423 @@
-import { useCallback } from "react";
-import { FieldValues, Path, PathValue, useFormContext, useWatch } from "react-hook-form"; // <--- Importamos useFormContext
+import type { QualifyConditionType } from "@matbett/shared";
+import { useCallback, useMemo } from "react";
+import { useFieldArray, useFormContext, useWatch } from "react-hook-form";
 
-import type { RewardQualifyConditionFormData } from "@/types/hooks";
-import { buildDefaultReward, buildDefaultQualifyCondition } from "@/utils/formDefaults";
+import type { RewardFormPaths } from "@/components/molecules/RewardFormBase";
+import type {
+  PromotionFormData,
+  RewardFormData,
+  RewardQualifyConditionFormData,
+  RewardServerModel,
+} from "@/types/hooks";
+import {
+  buildDefaultQualifyCondition,
+  buildDefaultReward,
+} from "@/utils/formDefaults";
+import { getFilteredQualifyConditionOptions } from "@/utils/rewardUtils";
 
-/**
- * Hook de lógica de dominio para la gestión de Rewards.
- * Desacoplado: Usa el contexto del formulario activo.
- */
-export function useRewardLogic<T extends FieldValues>(
-  basePath: Path<T> | ""
-  // Eliminamos el argumento 'form'. El hook lo busca solo.
-) {
-  // 1. Obtener métodos del contexto
-  const { setValue, getValues, control, reset } = useFormContext<T>();
+type PromotionRewardPaths = RewardFormPaths<
+  PromotionFormData,
+  `phases.${number}.rewards.${number}.qualifyConditions`
+> & {
+  reward: `phases.${number}.rewards.${number}`;
+};
 
-  // Helper para construir paths seguros (maneja basePath vacío)
-  const getPath = useCallback((field: string) => {
-    return basePath ? `${basePath}.${field}` : field;
-  }, [basePath]);
+type StandaloneRewardPaths = RewardFormPaths<
+  RewardFormData,
+  "qualifyConditions"
+>;
 
-  // Watchers locales
-  const rewardType = useWatch({
-    control,
-    name: getPath("type") as Path<T>,
-  });
+const isRewardQualifyCondition = (
+  value: unknown
+): value is RewardQualifyConditionFormData =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  "conditions" in value;
 
-  const valueType = useWatch({
-    control,
-    name: getPath("valueType") as Path<T>,
-  });
+const parseRewardValueType = (
+  value: unknown
+): RewardFormData["valueType"] | undefined =>
+  value === "FIXED" || value === "CALCULATED_FROM_CONDITIONS"
+    ? value
+    : undefined;
 
-  /**
-   * Resetea el reward a sus valores por defecto cuando cambia el tipo
-   */
-  const handleTypeChange = useCallback(
-    (newType: string) => {
-      const defaultReward = buildDefaultReward(newType);
-      // Mantenemos el ID si existe
-      const currentId = getValues(getPath("id") as Path<T>);
-      
-      const newRewardData = {
-        ...defaultReward,
-        id: currentId,
-      };
+const hasContributingCondition = (values: unknown): boolean => {
+  if (!Array.isArray(values)) {
+    return false;
+  }
 
-      // Si basePath es vacío, estamos en la raíz, usamos reset o setValue de root?
-      // setValue con path "" no funciona. Si basePath es vacío, debemos iterar claves o usar reset?
-      // En RHF, setValue de un objeto nested funciona. setValue de root...
-      // Si basePath existe, es un objeto nested.
-      if (basePath) {
-         setValue(basePath, newRewardData as PathValue<T, Path<T>>, {
-           shouldValidate: false,
-           shouldDirty: true,
-         });
-      } else {
-         // Estamos en root (RewardStandaloneForm). Usamos reset para reemplazar todos los valores.
-         // Double cast: RewardFormData (union) -> unknown -> T (generic)
-         // Safe at runtime because T is always RewardFormData when basePath is ""
-         reset(newRewardData as unknown as T);
-      }
-    },
-    [basePath, setValue, getValues, getPath, reset]
-  );
-
-  /**
-   * Reconstruye qualifyConditions cuando cambia reward.valueType
-   * Preserva campos comunes (id, description, timeframe, depositCode, etc.)
-   */
-  const handleValueTypeChange = useCallback(
-    (newValueType: string) => {
-      // Actualizar el valueType
-      setValue(getPath("valueType") as Path<T>, newValueType as PathValue<T, Path<T>>, { shouldValidate: false });
-
-      // Si es CALCULATED, resetear value a 0
-      if (newValueType === "CALCULATED_FROM_CONDITIONS") {
-        setValue(getPath("value") as Path<T>, 0 as PathValue<T, Path<T>>, { shouldValidate: false });
-      }
-
-      // Reconstruir todas las conditions preservando campos comunes
-      const conditionsPath = getPath("qualifyConditions") as Path<T>;
-      const conditions = getValues(conditionsPath);
-
-      if (Array.isArray(conditions)) {
-        conditions.forEach((condition: RewardQualifyConditionFormData, index: number) => {
-          if (condition.type === 'DEPOSIT' || condition.type === 'BET') {
-            // Determinar contributesToRewardValue según el nuevo valueType
-            const contributesToRewardValue = newValueType === 'CALCULATED_FROM_CONDITIONS'
-              ? (condition.conditions.contributesToRewardValue ?? false) // Preservar si existe
-              : false; // Forzar a false si FIXED
-
-            // Preservar campos comunes base
-            const preservedBaseFields = {
-              id: condition.id,
-              description: condition.description,
-              timeframe: condition.timeframe,
-              dependsOnQualifyConditionId: condition.dependsOnQualifyConditionId,
-              otherRestrictions: condition.otherRestrictions,
-            };
-
-            // Reconstruir condition con valores correctos
-            const newCondition = buildDefaultQualifyCondition(
-              condition.type,
-              contributesToRewardValue
-            );
-
-            // Aplicar campos base preservados
-            Object.assign(newCondition, preservedBaseFields);
-
-            // Preservar campos específicos comunes según el tipo
-            if (condition.type === 'DEPOSIT') {
-              Object.assign(newCondition.conditions, {
-                depositCode: condition.conditions.depositCode,
-                firstDepositOnly: condition.conditions.firstDepositOnly,
-              });
-            }
-            // BET: los campos de restricción son específicos del tipo calculated/fixed,
-            // por lo que no se preservan (se reconstruyen desde defaults)
-
-            // Actualizar la condition en el formulario
-            setValue(
-              `${conditionsPath}.${index}` as Path<T>,
-              newCondition as PathValue<T, Path<T>>,
-              { shouldValidate: false, shouldDirty: true }
-            );
-          }
-        });
-      }
-    },
-    [setValue, getValues, getPath]
-  );
-
-  const hasContributingCondition = useCallback((): boolean => {
-    const conditionsPath = getPath("qualifyConditions") as Path<T>;
-    const conditions = getValues(conditionsPath);
-
-    if (!Array.isArray(conditions)) return false;
-
-    // contributesToRewardValue ahora está dentro de conditions como discriminador
-    return conditions.some((c: RewardQualifyConditionFormData) => {
-      // Solo DEPOSIT y BET tienen contributesToRewardValue
-      if (c.type === 'DEPOSIT' || c.type === 'BET') {
-        return c.conditions.contributesToRewardValue === true;
-      }
+  return values.some((condition) => {
+    if (!isRewardQualifyCondition(condition)) {
       return false;
-    });
-  }, [getPath, getValues]);
+    }
+    if (condition.type === "DEPOSIT" || condition.type === "BET") {
+      return condition.conditions.contributesToRewardValue === true;
+    }
+    return false;
+  });
+};
+
+const getContributesToRewardValue = (
+  condition: RewardQualifyConditionFormData
+): boolean => {
+  if (condition.type === "DEPOSIT" || condition.type === "BET") {
+    return condition.conditions.contributesToRewardValue === true;
+  }
+  return false;
+};
+
+const getQualifyConditionRemoveBlockedReason = (
+  rewardServerData: RewardServerModel | undefined,
+  conditionIndex: number
+) => {
+  const serverCanDelete =
+    rewardServerData?.qualifyConditions?.[conditionIndex]?.canDelete ?? true;
+  const genericReason = "No se puede eliminar porque tiene dependencias.";
+  if (!serverCanDelete) {
+    return genericReason;
+  }
+
+  return undefined;
+};
+
+const getDefaultQualifyConditionTypeForReward = (
+  rewardType: unknown
+): QualifyConditionType => {
+  const options =
+    typeof rewardType === "string"
+      ? getFilteredQualifyConditionOptions(rewardType)
+      : getFilteredQualifyConditionOptions();
+
+  const firstOption = options[0]?.value;
+  if (
+    firstOption === "DEPOSIT" ||
+    firstOption === "BET" ||
+    firstOption === "LOSSES_CASHBACK"
+  ) {
+    return firstOption;
+  }
+
+  return "DEPOSIT";
+};
+
+function useRewardValueTypeSync(params: {
+  qualifyConditionsValues: unknown;
+  updateQualifyCondition: (
+    index: number,
+    value: RewardQualifyConditionFormData
+  ) => void;
+}) {
+  const { qualifyConditionsValues, updateQualifyCondition } = params;
+
+  return useCallback(
+    (newValueType: RewardFormData["valueType"]) => {
+      if (!Array.isArray(qualifyConditionsValues)) {
+        return;
+      }
+
+      qualifyConditionsValues.forEach((condition, index) => {
+        if (!isRewardQualifyCondition(condition)) {
+          return;
+        }
+        if (condition.type !== "DEPOSIT" && condition.type !== "BET") {
+          return;
+        }
+
+        const contributesToRewardValue =
+          newValueType === "CALCULATED_FROM_CONDITIONS"
+            ? (condition.conditions.contributesToRewardValue ?? false)
+            : false;
+
+        const nextCondition = buildDefaultQualifyCondition(
+          condition.type,
+          contributesToRewardValue
+        );
+
+        Object.assign(nextCondition, {
+          id: condition.id,
+          clientId: condition.clientId,
+          description: condition.description,
+          timeframe: condition.timeframe,
+        });
+
+        if (condition.type === "DEPOSIT") {
+          Object.assign(nextCondition.conditions, {
+            depositCode: condition.conditions.depositCode,
+            firstDepositOnly: condition.conditions.firstDepositOnly,
+            otherRestrictions: condition.conditions.otherRestrictions,
+          });
+        } else if (condition.type === "BET") {
+          Object.assign(nextCondition.conditions, {
+            otherRestrictions: condition.conditions.otherRestrictions,
+          });
+        }
+
+        updateQualifyCondition(index, nextCondition);
+      });
+    },
+    [qualifyConditionsValues, updateQualifyCondition]
+  );
+}
+
+function useQualifyConditionTypeSync(params: {
+  qualifyConditionsValues: unknown;
+  valueType: RewardFormData["valueType"] | undefined;
+  updateQualifyCondition: (
+    index: number,
+    value: RewardQualifyConditionFormData
+  ) => void;
+}) {
+  const { qualifyConditionsValues, valueType, updateQualifyCondition } = params;
+
+  return useCallback(
+    (index: number, newType: QualifyConditionType) => {
+      const currentCondition = Array.isArray(qualifyConditionsValues)
+        ? qualifyConditionsValues[index]
+        : undefined;
+
+      if (!isRewardQualifyCondition(currentCondition)) {
+        updateQualifyCondition(index, buildDefaultQualifyCondition(newType));
+        return;
+      }
+
+      const canContribute =
+        valueType === "CALCULATED_FROM_CONDITIONS" &&
+        (newType === "DEPOSIT" || newType === "BET");
+      const contributesToRewardValue = canContribute
+        ? getContributesToRewardValue(currentCondition)
+        : false;
+
+      const nextCondition = buildDefaultQualifyCondition(
+        newType,
+        contributesToRewardValue
+      );
+
+      // Al cambiar de tipo, reseteamos la configuración al default del nuevo tipo.
+      // Solo preservamos identidad para mantener la referencia del item en edición.
+      nextCondition.id = currentCondition.id;
+      nextCondition.clientId = currentCondition.clientId;
+
+      updateQualifyCondition(index, nextCondition);
+    },
+    [qualifyConditionsValues, updateQualifyCondition, valueType]
+  );
+}
+
+export function usePromotionRewardLogic(
+  paths: PromotionRewardPaths,
+  rewardServerData?: RewardServerModel
+) {
+  const { control, getValues, setValue } = useFormContext<PromotionFormData>();
+
+  const {
+    fields: qualifyConditions,
+    append: appendQualifyCondition,
+    remove: removeQualifyCondition,
+    update: updateQualifyCondition,
+    replace: replaceQualifyConditions,
+  } = useFieldArray({
+    control,
+    name: paths.qualifyConditions,
+  });
+
+  const rewardType = useWatch({ control, name: paths.type });
+  const valueType = parseRewardValueType(
+    useWatch({ control, name: paths.valueType })
+  );
+  const qualifyConditionsValues = useWatch({
+    control,
+    name: paths.qualifyConditions,
+  });
+
+  const addQualifyCondition = useCallback(() => {
+    const defaultType = getDefaultQualifyConditionTypeForReward(rewardType);
+    appendQualifyCondition(buildDefaultQualifyCondition(defaultType));
+  }, [appendQualifyCondition, rewardType]);
+
+  const handleTypeChange = useCallback(
+    (newType: RewardFormData["type"]) => {
+      const defaults = buildDefaultReward(newType);
+      const currentReward = getValues(paths.reward);
+
+      // Importante: limpiar explícitamente el field array para evitar filas "fantasma"
+      // cuando se cambia el tipo de reward.
+      replaceQualifyConditions([]);
+
+      setValue(
+        paths.reward,
+        {
+          ...defaults,
+          id: currentReward?.id,
+          clientId: currentReward?.clientId ?? defaults.clientId,
+        },
+        { shouldDirty: true }
+      );
+    },
+    [getValues, paths.reward, replaceQualifyConditions, setValue]
+  );
+
+  const syncConditionsByValueType = useRewardValueTypeSync({
+    qualifyConditionsValues,
+    updateQualifyCondition,
+  });
+
+  const handleValueTypeChange = useCallback(
+    (newValueType: RewardFormData["valueType"]) => {
+      setValue(paths.valueType, newValueType, { shouldDirty: true });
+      syncConditionsByValueType(newValueType);
+    },
+    [paths.valueType, setValue, syncConditionsByValueType]
+  );
+
+  const handleQualifyConditionTypeChange = useQualifyConditionTypeSync({
+    qualifyConditionsValues,
+    valueType,
+    updateQualifyCondition,
+  });
+
+  const getQualifyConditionRemoveDisabledReason = useCallback(
+    (conditionIndex: number) =>
+      getQualifyConditionRemoveBlockedReason(
+        rewardServerData,
+        conditionIndex
+      ),
+    [rewardServerData]
+  );
+
+  const canRemoveQualifyCondition = useCallback(
+    (conditionIndex: number) =>
+      !getQualifyConditionRemoveBlockedReason(
+        rewardServerData,
+        conditionIndex
+      ),
+    [rewardServerData]
+  );
 
   return {
-    control, // Devolvemos control por si el componente lo necesita para inputs genéricos
     rewardType,
     valueType,
+    qualifyConditions,
+    qualifyConditionsValues,
     handleTypeChange,
     handleValueTypeChange,
-    hasContributingCondition,
-    getPath, // Exportamos helper para componentes
+    rewardHasContributingCondition: useMemo(
+      () => hasContributingCondition(qualifyConditionsValues),
+      [qualifyConditionsValues]
+    ),
+    addQualifyCondition,
+    appendQualifyCondition,
+    removeQualifyCondition,
+    updateQualifyCondition,
+    handleQualifyConditionTypeChange,
+    getQualifyConditionRemoveDisabledReason,
+    canRemoveQualifyCondition,
+  };
+}
+
+export function useStandaloneRewardLogic(
+  paths: StandaloneRewardPaths,
+  rewardServerData?: RewardServerModel
+) {
+  const { control, getValues, reset, setValue } =
+    useFormContext<RewardFormData>();
+
+  const {
+    fields: qualifyConditions,
+    append: appendQualifyCondition,
+    remove: removeQualifyCondition,
+    update: updateQualifyCondition,
+    replace: replaceQualifyConditions,
+  } = useFieldArray({
+    control,
+    name: paths.qualifyConditions,
+  });
+
+  const rewardType = useWatch({ control, name: paths.type });
+  const valueType = parseRewardValueType(
+    useWatch({ control, name: paths.valueType })
+  );
+  const qualifyConditionsValues = useWatch({
+    control,
+    name: paths.qualifyConditions,
+  });
+
+  const addQualifyCondition = useCallback(() => {
+    const defaultType = getDefaultQualifyConditionTypeForReward(rewardType);
+    appendQualifyCondition(buildDefaultQualifyCondition(defaultType));
+  }, [appendQualifyCondition, rewardType]);
+
+  const handleTypeChange = useCallback(
+    (newType: RewardFormData["type"]) => {
+      const defaults = buildDefaultReward(newType);
+      const currentReward = getValues();
+
+      // Misma limpieza explícita en standalone para mantener sincronía con useFieldArray.
+      replaceQualifyConditions([]);
+
+      reset({
+        ...defaults,
+        id: currentReward.id,
+        clientId: currentReward.clientId ?? defaults.clientId,
+      });
+    },
+    [getValues, replaceQualifyConditions, reset]
+  );
+
+  const syncConditionsByValueType = useRewardValueTypeSync({
+    qualifyConditionsValues,
+    updateQualifyCondition,
+  });
+
+  const handleValueTypeChange = useCallback(
+    (newValueType: RewardFormData["valueType"]) => {
+      setValue(paths.valueType, newValueType, { shouldDirty: true });
+      syncConditionsByValueType(newValueType);
+    },
+    [paths.valueType, setValue, syncConditionsByValueType]
+  );
+
+  const handleQualifyConditionTypeChange = useQualifyConditionTypeSync({
+    qualifyConditionsValues,
+    valueType,
+    updateQualifyCondition,
+  });
+
+  const getQualifyConditionRemoveDisabledReason = useCallback(
+    (conditionIndex: number) =>
+      getQualifyConditionRemoveBlockedReason(
+        rewardServerData,
+        conditionIndex
+      ),
+    [rewardServerData]
+  );
+
+  const canRemoveQualifyCondition = useCallback(
+    (conditionIndex: number) =>
+      !getQualifyConditionRemoveBlockedReason(
+        rewardServerData,
+        conditionIndex
+      ),
+    [rewardServerData]
+  );
+
+  return {
+    rewardType,
+    valueType,
+    qualifyConditions,
+    qualifyConditionsValues,
+    handleTypeChange,
+    handleValueTypeChange,
+    rewardHasContributingCondition: useMemo(
+      () => hasContributingCondition(qualifyConditionsValues),
+      [qualifyConditionsValues]
+    ),
+    addQualifyCondition,
+    appendQualifyCondition,
+    removeQualifyCondition,
+    updateQualifyCondition,
+    handleQualifyConditionTypeChange,
+    getQualifyConditionRemoveDisabledReason,
+    canRemoveQualifyCondition,
   };
 }

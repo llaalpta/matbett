@@ -1,8 +1,8 @@
 "use client";
 
-import { phaseStatusOptions, activationMethodOptions, rewardTypeOptions, getLabel, type AvailableTimeframes } from "@matbett/shared";
-import React from "react";
-import { useFormContext, useFieldArray, FieldArrayPath, Path, useWatch } from "react-hook-form";
+import { phaseStatusOptions, activationMethodOptions, rewardTypeOptions, getLabel, type AnchorCatalog, type AnchorOccurrences } from "@matbett/shared";
+import { Trash2 } from "lucide-react";
+import React, { useCallback, useState } from "react";
 
 import {
   TypographyH3,
@@ -15,92 +15,132 @@ import { SelectField } from "@/components/atoms/SelectField";
 import { TextareaField } from "@/components/atoms/TextareaField";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { PromotionFormData, RewardFormData, PhaseServerModel } from "@/types/hooks";
-import { buildDefaultReward } from "@/utils/formDefaults";
-import { useStatusDateSync } from "@/hooks/useStatusDateSync";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePhaseLogic } from "@/hooks/domain/usePhaseLogic";
+import type { PromotionFormData, PhaseServerModel } from "@/types/hooks";
+
+import { DateTimeField } from "../atoms";
 
 import { RewardForm } from "./RewardForm";
 import { TimeframeForm } from "./TimeframeForm";
-import { DateTimeField } from "../atoms";
 
 interface PhaseFormProps {
-  fieldPath: string; // ej: "phases.0"
+  phaseIndex: number;
   onRemove?: () => void;
+  removeDisabledReason?: string;
   isSimplified?: boolean;
   isEditing?: boolean;
   // Props explícitas para tracking
   onRewardSelect?: (id: string, index: number) => void;
   onQualifyConditionSelect?: (id: string, index: number) => void;
-  availableTimeframes?: AvailableTimeframes;
+  availableQualifyConditions?: Array<{
+    id: string;
+    type: string;
+    description?: string | null;
+  }>;
+  anchorCatalog?: AnchorCatalog;
+  anchorOccurrences?: AnchorOccurrences;
   phaseServerData?: PhaseServerModel; // Datos del servidor para esta fase
 }
 
 export const PhaseForm: React.FC<PhaseFormProps> = ({
-  fieldPath,
+  phaseIndex,
   onRemove,
+  removeDisabledReason,
   isSimplified = false,
   isEditing = false,
   onRewardSelect,
   onQualifyConditionSelect,
-  availableTimeframes,
+  availableQualifyConditions,
+  anchorCatalog,
+  anchorOccurrences,
   phaseServerData,
 }) => {
-  // 1. Obtener contexto del formulario
-  const { control, getValues, setValue } = useFormContext<PromotionFormData>();
-
-  const fieldPrefix = `${fieldPath}.`;
-
-  // 2. Field Array de Rewards
-  const rewardsFieldArray = useFieldArray({
-    control,
-    name: `${fieldPrefix}rewards` as FieldArrayPath<PromotionFormData>,
+  const {
+    rewardsFieldArray,
+    rewardsValues,
+    addReward,
+    removeReward,
+    canRemoveReward,
+    getRewardRemoveDisabledReason,
+    getRewardIdByIndex,
+    getRewardFieldPath,
+    namePath,
+    descriptionPath,
+    activationMethodPath,
+    statusPath,
+    statusDatePath,
+    timeframePaths,
+  } = usePhaseLogic({
+    phaseIndex,
+    phaseServerData,
   });
+  const [rewardTabIndex, setRewardTabIndex] = useState(0);
+  const activeRewardTabIndex = Math.min(
+    rewardTabIndex,
+    Math.max(rewardsFieldArray.fields.length - 1, 0)
+  );
 
-  // Watch rewards to get types for tabs labels
-  const rewardsValues = useWatch({
-    control,
-    name: `${fieldPrefix}rewards` as Path<PromotionFormData>,
-  });
+  const handleRemoveReward = useCallback(
+    (rewardIndex: number) => {
+      setRewardTabIndex((current) => {
+        const nextLength = rewardsFieldArray.fields.length - 1;
+        if (nextLength <= 0) {
+          return 0;
+        }
+        if (rewardIndex < current) {
+          return current - 1;
+        }
+        if (rewardIndex === current) {
+          return Math.min(current, nextLength - 1);
+        }
+        return current;
+      });
+      removeReward(rewardIndex);
+    },
+    [removeReward, rewardsFieldArray.fields.length]
+  );
 
-  // Sincronizar fechas de estado para la fase
-  useStatusDateSync({
-    control,
-    setValue,
-    statusPath: `${fieldPrefix}status` as Path<PromotionFormData>,
-    datePath: `${fieldPrefix}statusDate` as Path<PromotionFormData>,
-    serverDates: phaseServerData,
-  });
-
-  const addReward = (type: string = "FREEBET") => {
-    rewardsFieldArray.append(buildDefaultReward(type));
-  };
-
-  const removeReward = (rewardIndex: number) => {
-    rewardsFieldArray.remove(rewardIndex);
-  };
-
-  // Handler para cambio de tab de reward (usa la prop recibida)
-  const handleRewardTabChange = (value: string) => {
-    const rewardIndex = parseInt(value);
-    const reward = getValues(`${fieldPrefix}rewards.${rewardIndex}` as Path<PromotionFormData>) as RewardFormData;
-    
-    if (reward?.id && onRewardSelect) {
-      onRewardSelect(reward.id, rewardIndex);
-    }
-  };
+  const handleRewardTabChange = useCallback(
+    (value: string) => {
+      const rewardIndex = Number.parseInt(value, 10);
+      if (Number.isNaN(rewardIndex)) {
+        return;
+      }
+      setRewardTabIndex(rewardIndex);
+      if (!onRewardSelect) {
+        return;
+      }
+      const rewardId = getRewardIdByIndex(rewardIndex);
+      if (!rewardId) {
+        return;
+      }
+      onRewardSelect(rewardId, rewardIndex);
+    },
+    [getRewardIdByIndex, onRewardSelect]
+  );
 
   // Helper para renderizar RewardForm (DRY)
-  const renderRewardForm = (index: number) => (
-    <RewardForm<PromotionFormData>
-      fieldPath={`${fieldPrefix}rewards.${index}` as Path<PromotionFormData>}
-      onRemove={() => removeReward(index)}
-      canRemove={!isSimplified || rewardsFieldArray.fields.length > 1}
-      isEditing={isEditing}
-      onQualifyConditionSelect={onQualifyConditionSelect}
-      availableTimeframes={availableTimeframes}
-      rewardServerData={phaseServerData?.rewards?.[index]} // Pasar datos del servidor en cascada
-    />
-  );
+  const renderRewardForm = (index: number) => {
+    const rewardPath = getRewardFieldPath(index);
+    const rewardRemoveDisabledReason = getRewardRemoveDisabledReason(index);
+    const canRemoveCurrentReward = canRemoveReward(index, isSimplified);
+
+    return (
+      <RewardForm
+        fieldPath={rewardPath}
+        onRemove={() => handleRemoveReward(index)}
+        canRemove={canRemoveCurrentReward}
+        removeDisabledReason={rewardRemoveDisabledReason}
+        isEditing={isEditing}
+        onQualifyConditionSelect={onQualifyConditionSelect}
+        availableQualifyConditions={availableQualifyConditions}
+        anchorCatalog={anchorCatalog}
+        anchorOccurrences={anchorOccurrences}
+        rewardServerData={phaseServerData?.rewards?.[index]} // Pasar datos del servidor en cascada
+      />
+    );
+  };
 
   // --- RENDERIZADO (MODO SIMPLIFICADO / FASE ÚNICA) ---
   if (isSimplified) {
@@ -138,10 +178,13 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
           renderRewardForm(0)
         ) : (
           // Si hay más de una recompensa, mostrar con tabs
-          <Tabs defaultValue="0" onValueChange={handleRewardTabChange}>
+          <Tabs
+            value={activeRewardTabIndex.toString()}
+            onValueChange={handleRewardTabChange}
+          >
             <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
               {rewardsFieldArray.fields.map((_, rewardIndex) => {
-                const rewardType = (rewardsValues as any)?.[rewardIndex]?.type || "FREEBET";
+                const rewardType = rewardsValues?.[rewardIndex]?.type ?? "FREEBET";
                 const label = getLabel(rewardTypeOptions, rewardType);
                 return (
                   <TabsTrigger key={rewardIndex} value={rewardIndex.toString()}>
@@ -167,29 +210,53 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <TypographyH3>
-          {fieldPath.includes("phases.")
-            ? `Fase ${fieldPath.split(".")[1] ? parseInt(fieldPath.split(".")[1]) + 1 : 1}`
-            : "Fase"}
+          {`Fase ${phaseIndex + 1}`}
         </TypographyH3>
-        {onRemove && (
-          <Button type="button" variant="destructive" size="sm" onClick={onRemove}>
-            Eliminar Fase
-          </Button>
-        )}
+        {(onRemove || removeDisabledReason) ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!onRemove}
+                  onClick={() => {
+                    if (!onRemove) {
+                      return;
+                    }
+                    onRemove();
+                  }}
+                  className={
+                    onRemove
+                      ? "text-destructive hover:text-destructive/90"
+                      : "text-muted-foreground"
+                  }
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar fase
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {removeDisabledReason ? (
+              <TooltipContent sideOffset={6}>{removeDisabledReason}</TooltipContent>
+            ) : null}
+          </Tooltip>
+        ) : null}
       </div>
 
       <div className="space-y-4">
         <TypographyH4>Información básica</TypographyH4>
 
         <InputField<PromotionFormData>
-          name={`${fieldPrefix}name` as Path<PromotionFormData>}
+          name={namePath}
           label="Nombre de la fase"
           placeholder="Ej: Depósito inicial, Apuesta de calificación, etc."
           required
         />
 
         <TextareaField<PromotionFormData>
-          name={`${fieldPrefix}description` as Path<PromotionFormData>}
+          name={descriptionPath}
           label="Descripción"
           placeholder="Describe qué debe hacer el usuario en esta fase"
           rows={3}
@@ -197,20 +264,20 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
         
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <SelectField<PromotionFormData>
-            name={`${fieldPrefix}activationMethod` as Path<PromotionFormData>}
+            name={activationMethodPath}
             label="Método de activación"
             options={activationMethodOptions}
             required
           />
           <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
             <SelectField<PromotionFormData>
-              name={`${fieldPrefix}status` as Path<PromotionFormData>}
+              name={statusPath}
               label="Estado"
               options={phaseStatusOptions}
             />
             <DateTimeField<PromotionFormData>
-              name={`${fieldPrefix}statusDate` as Path<PromotionFormData>}
-              label="Fecha del estado"
+              name={statusDatePath}
+              label="Fecha del cambio de estado"
               tooltip="Fecha en la que la fase cambió a este estado"
             />
           </div>
@@ -218,7 +285,9 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
       </div>
 
       <TimeframeForm<PromotionFormData>
-        basePath={`${fieldPrefix}timeframe` as Path<PromotionFormData>}
+        paths={timeframePaths}
+        anchorCatalog={anchorCatalog}
+        anchorOccurrences={anchorOccurrences}
         title="Duración de la fase"
       />
 
@@ -237,10 +306,13 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
         ) : rewardsFieldArray.fields.length === 1 ? (
             renderRewardForm(0)
         ) : (
-            <Tabs defaultValue="0" onValueChange={handleRewardTabChange}>
+            <Tabs
+              value={activeRewardTabIndex.toString()}
+              onValueChange={handleRewardTabChange}
+            >
               <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
                 {rewardsFieldArray.fields.map((_, rewardIndex) => {
-                  const rewardType = (rewardsValues as any)?.[rewardIndex]?.type || "FREEBET";
+                  const rewardType = rewardsValues?.[rewardIndex]?.type ?? "FREEBET";
                   const label = getLabel(rewardTypeOptions, rewardType);
                   return (
                     <TabsTrigger key={rewardIndex} value={rewardIndex.toString()}>
@@ -261,3 +333,5 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
     </div>
   );
 };
+
+

@@ -4,26 +4,10 @@
 // =============================================
 
 import type { 
-  RewardQualifyConditionRole, 
-  EntityType, 
-  AnchorEvent 
+  RewardQualifyConditionRole
 } from '@matbett/shared';
 
 import type { RewardQualifyConditionFormData } from './hooks';
-
-// =============================================
-// TIMEFRAME UI STATE
-// =============================================
-
-/**
- * Anchor simplificado para formularios (UI State).
- * A diferencia del DTO del backend, este no necesita toda la info, solo lo que el usuario selecciona.
- */
-export interface TimeframeAnchorForm {
-  entityType: EntityType;
-  entityId: string;
-  event: AnchorEvent;
-}
 
 // =============================================
 // PROMOTION CONTEXT (UI)

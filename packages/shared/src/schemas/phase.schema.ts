@@ -6,7 +6,6 @@ import { z } from 'zod';
 
 import { PhaseStatusSchema, ActivationMethodSchema } from './enums';
 import { TimeframeSchema } from './timeframe.schema';
-import { QualifyConditionSchema, QualifyConditionEntitySchema } from './qualify-condition.schema';
 import { RewardSchema, RewardEntitySchema } from './reward.schema';
 
 // =============================================
@@ -40,17 +39,20 @@ const PhaseStateTimestampsSchema = z.object({
  */
 export const PhaseSchema = z.object({
   id: z.string().optional(),
+  clientId: z.string().uuid().optional(),
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().optional(),
   status: PhaseStatusSchema.optional(),
   
   // Fecha genérica asociada al estado actual
-  statusDate: z.coerce.date().nullish(),
+  statusDate: z.date(),
 
   activationMethod: ActivationMethodSchema,
   timeframe: TimeframeSchema,
-  availableQualifyConditions: z.array(QualifyConditionSchema),
   rewards: z.array(RewardSchema).min(1),
+}).refine((value) => Boolean(value.id || value.clientId), {
+  message: 'Phase requires id or clientId',
+  path: ['id'],
 });
 
 // =============================================
@@ -61,13 +63,13 @@ export const PhaseSchema = z.object({
  * Schema de OUTPUT - Con EntitySchemas que incluyen tracking
  */
 export const PhaseEntitySchema = PhaseSchema
-  .extend({
+  .safeExtend({
     id: z.string(),
     status: PhaseStatusSchema,
     promotionId: z.string(),
+    canDelete: z.boolean(),
     totalBalance: z.number(),
     // Sobrescribir con EntitySchemas (que incluyen tracking)
-    availableQualifyConditions: z.array(QualifyConditionEntitySchema),
     rewards: z.array(RewardEntitySchema).min(1),
     ...PhaseStateTimestampsSchema.shape,
     ...AuditTimestampsSchema.shape,

@@ -5,7 +5,6 @@
 
 import { z } from 'zod';
 import {
-  RewardSchema,
   RewardEntitySchema,
   UpdateRewardInputSchema,
   // RewardListInputSchema, // Si tuviéramos un listado independiente
@@ -27,19 +26,6 @@ export const rewardRouter = router({
     .query(async ({ ctx, input }) => {
       // Asumimos que el rewardService tiene un getById
       const reward = await ctx.rewardService.getById(input.id);
-      return reward;
-    }),
-
-  /**
-   * Crear nueva recompensa (raro, normalmente via Promotion)
-   */
-  create: publicProcedure
-    .input(RewardSchema)
-    .output(RewardEntitySchema)
-    .mutation(async ({ ctx, input }) => {
-      // Asumimos que el rewardService tiene un create
-      // ctx.userId es necesario si el reward se asigna directamente a un usuario
-      const reward = await ctx.rewardService.create(input, ctx.userId);
       return reward;
     }),
 

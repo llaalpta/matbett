@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface SelectOption {
@@ -35,7 +36,7 @@ interface SelectFieldProps<
   label?: string;
   placeholder?: string;
   tooltip?: string; // Texto que aparece en el tooltip al hacer hover sobre el ícono (?)
-  options: SelectOption[];
+  options: readonly SelectOption[];
   size?: "sm" | "md" | "lg";
   className?: string;
   containerClassName?: string;
@@ -108,7 +109,7 @@ export function SelectField<
                     data-visual-state={visualState}
                     className={cn(
                       sizeClasses[size],
-                      "w-full rounded-md bg-background"
+                      "bg-background w-full rounded-md"
                     )}
                   >
                     <SelectValue placeholder={placeholder} />

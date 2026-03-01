@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import { FormProvider } from "react-hook-form";
 
-import { RewardForm } from "@/components/molecules/RewardForm";
+import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
+import { StandaloneRewardFormFields } from "@/components/molecules/RewardForm";
 import { Button } from "@/components/ui/button";
+import { useAvailableQualifyConditions } from "@/hooks/api/usePromotions";
 import { useReward, useUpdateReward } from "@/hooks/api/useRewards";
-import { useAvailableTimeframes } from "@/hooks/api/usePromotions";
+import { useAnchorContext } from "@/hooks/domain/useAnchorContext";
+import { useApiErrorMessage } from "@/hooks/useApiErrorMessage";
+import { useApiSuccessToast } from "@/hooks/useApiSuccessToast";
+import { useFormInvalidSubmitFocus } from "@/hooks/useFormInvalidSubmitFocus";
 import { useRewardForm } from "@/hooks/useRewardForm";
 import type { RewardFormData } from "@/types/hooks";
-import { buildDefaultReward } from "@/utils/formDefaults";
 
 interface RewardStandaloneFormProps {
-  rewardId?: string; // Solo si se está editando
+  rewardId?: string;
   onSuccess?: () => void;
 }
 
@@ -20,61 +23,44 @@ export function RewardStandaloneForm({
   rewardId,
   onSuccess,
 }: RewardStandaloneFormProps) {
-  // Fetch del reward existente si estamos editando
   const { data: rewardData, isLoading: isLoadingReward } = useReward(rewardId);
   const updateRewardMutation = useUpdateReward();
+  const { apiErrorMessage, clearApiError, setApiError } = useApiErrorMessage();
+  const { notifySuccess } = useApiSuccessToast();
 
-  // Fetch de availableTimeframes usando el promotionId del reward
-  const { data: availableTimeframes, isLoading: isLoadingTimeframes } = useAvailableTimeframes(rewardData?.promotionId);
-
-  // ✅ Usar hook factory para consistencia con PromotionForm
-  const form = useRewardForm(rewardData ?? undefined);
-
-  // ✅ Tracking state para UI (qué qualifyCondition está seleccionada)
-  const [qualifyConditionId, setQualifyConditionId] = useState<string>();
-  const [qualifyConditionIndex, setQualifyConditionIndex] = useState<number>();
-
-  // ✅ Modal state (abrir/cerrar deposit modal)
-  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
-
-  // Resetear formulario si cambian los datos del reward (por ejemplo, al navegar entre IDs)
-  useEffect(() => {
-    if (rewardData) {
-      form.reset(buildDefaultReward(rewardData.type, rewardData));
-    }
-  }, [rewardData, form]);
-
-  // ✅ Handlers para modals
-  const handleQualifyConditionSelect = useCallback(
-    (id: string, index: number) => {
-      setQualifyConditionId(id);
-      setQualifyConditionIndex(index);
-      setIsDepositModalOpen(true);
-    },
-    []
+  const {
+    anchorCatalog,
+    anchorOccurrences,
+    isLoadingAnchorCatalog,
+    isLoadingAnchorOccurrences,
+  } = useAnchorContext({
+    promotionId: rewardData?.promotionId,
+  });
+  const { data: availableQualifyConditions } = useAvailableQualifyConditions(
+    rewardData?.promotionId
   );
 
-  const handleCloseDepositModal = useCallback(() => {
-    setIsDepositModalOpen(false);
-  }, []);
-
-
-  const { handleSubmit } = form;
+  const form = useRewardForm(rewardData ?? undefined);
+  const { formRef, validationBannerRef, focusFirstInvalidField } =
+    useFormInvalidSubmitFocus();
 
   const onSubmit = async (data: RewardFormData) => {
-    if (!rewardId) return; // No se puede actualizar sin ID
-
+    if (!rewardId) {
+      return;
+    }
+    clearApiError();
     try {
-      await updateRewardMutation.mutateAsync({ id: rewardId, data: data });
+      await updateRewardMutation.mutateAsync({ id: rewardId, data });
+      notifySuccess("Recompensa actualizada.");
       onSuccess?.();
     } catch (error) {
-      console.error("Error al actualizar reward:", error);
-      // TODO: Mostrar un toast de error
+      setApiError(error, "No se pudo actualizar la recompensa.");
     }
   };
 
   const isSubmitting = updateRewardMutation.isPending;
-  const isLoading = isLoadingReward || isLoadingTimeframes;
+  const isLoading =
+    isLoadingReward || isLoadingAnchorCatalog || isLoadingAnchorOccurrences;
 
   if (isLoading) {
     return <p>Cargando datos de la recompensa...</p>;
@@ -82,29 +68,33 @@ export function RewardStandaloneForm({
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <RewardForm<RewardFormData>
-          fieldPath="" // El path es vacío porque este formulario edita el Reward directamente
-          rewardServerData={rewardData ?? undefined}
-          onRemove={() => { /* No aplica para standalone */ }}
-          canRemove={false}
-          isEditing={!!rewardId}
-          availableTimeframes={availableTimeframes}
-          onQualifyConditionSelect={handleQualifyConditionSelect}
+      <form
+        ref={formRef}
+        onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
+        className="space-y-6"
+      >
+        <ValidationErrorBanner<RewardFormData>
+          errors={form.formState.errors}
+          submitCount={form.formState.submitCount}
+          containerRef={validationBannerRef}
+          mode="generic"
+          onDismiss={() => form.clearErrors()}
+        />
+        <ApiErrorBanner
+          errorMessage={apiErrorMessage}
+          onDismissError={clearApiError}
         />
 
-        {/* TODO: Modal de Deposit Tracking
-        {isDepositModalOpen && qualifyConditionIndex !== undefined && (
-          <DepositQualifyModal
-            isOpen={isDepositModalOpen}
-            onClose={handleCloseDepositModal}
-            qualifyConditionId={qualifyConditionId}
-            qualifyConditionIndex={qualifyConditionIndex}
-          />
-        )}
-        */}
+        <StandaloneRewardFormFields
+          isEditing={Boolean(rewardId)}
+          rewardServerData={rewardData ?? undefined}
+          anchorCatalog={anchorCatalog}
+          anchorOccurrences={anchorOccurrences}
+          availableQualifyConditions={availableQualifyConditions}
+        />
+
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Guardando..." : "Guardar Cambios"}
+          {isSubmitting ? "Guardando..." : "Guardar cambios"}
         </Button>
       </form>
     </FormProvider>

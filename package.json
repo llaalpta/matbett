@@ -22,6 +22,13 @@
     "db:logs": "docker-compose logs -f postgres"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "2.1.4",
+    "@next/eslint-plugin-next": "^15.4.6",
+    "baseline-browser-mapping": "^2.9.18",
+    "eslint": "8.57.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-unused-imports": "^3.2.0",
     "typescript": "^5.7.2"
   },
   "engines": {

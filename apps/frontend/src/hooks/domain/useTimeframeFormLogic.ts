@@ -1,229 +1,264 @@
 import type {
-  AvailableTimeframes,
-  AvailableTimeframesByType,
-  AvailableTimeframeEntity,
-  TimeframeEventTimestamp,
+  AnchorCatalog,
+  AnchorCatalogByType,
+  AnchorCatalogEntity,
+  AnchorCatalogEvent,
+  AnchorOccurrences,
 } from "@matbett/shared";
-import { useCallback, useMemo } from "react";
-import {
-  FieldValues,
-  Path,
-  PathValue,
-  useFormContext,
-  useWatch,
-} from "react-hook-form";
+import { getAnchorEventLabel } from "@matbett/shared";
+import { useEffect, useMemo } from "react";
+import { FieldValues, useFormContext, useWatch } from "react-hook-form";
 
+import type { TimeframePaths } from "@/components/molecules/TimeframeForm";
 import type { PromotionFormData } from "@/types/hooks";
+import { toFiniteNumber } from "@/utils/numberHelpers";
 
-/**
- * Hook de lógica de dominio para TimeframeForm.
- * Centraliza toda la lógica: watchers, opciones de selects, cálculos y handlers.
- */
+const sortByLabel = (a: { label: string }, b: { label: string }) =>
+  a.label.localeCompare(b.label, "es", {
+    sensitivity: "base",
+  });
+
+const findTypeGroup = (
+  anchorCatalog: AnchorCatalog | undefined,
+  entityType: string | undefined
+): AnchorCatalogByType | undefined => {
+  if (!anchorCatalog || !entityType) {
+    return undefined;
+  }
+  return anchorCatalog.find((group) => group.entityType === entityType);
+};
+
+const findEntity = (
+  typeGroup: AnchorCatalogByType | undefined,
+  entityRef: string | undefined
+): AnchorCatalogEntity | undefined => {
+  if (!typeGroup || !entityRef) {
+    return undefined;
+  }
+  return typeGroup.entities.find((entity) => entity.entityRef === entityRef);
+};
+
 export function useTimeframeFormLogic<T extends FieldValues = PromotionFormData>(
-  basePath: Path<T>,
-  availableTimeframes: AvailableTimeframes | undefined
+  paths: TimeframePaths<T>,
+  anchorCatalog: AnchorCatalog | undefined,
+  anchorOccurrences: AnchorOccurrences | undefined
 ) {
-  // 1. Contexto del formulario
-  const { setValue, control, getValues } = useFormContext<T>();
+  const modePath: string = paths.mode;
+  const anchorEntityTypePath: string = paths.anchorEntityType;
+  const anchorEntityRefTypePath: string = paths.anchorEntityRefType;
+  const anchorEntityRefPath: string = paths.anchorEntityRef;
+  const anchorEventPath: string = paths.anchorEvent;
+  const offsetDaysPath: string = paths.offsetDays;
 
-  // 2. Watchers locales
-  const timeframeMode = useWatch({
+  const { control, setValue } = useFormContext<FieldValues>();
+
+  const timeframeMode = useWatch({ control, name: modePath });
+  const entityType = useWatch({ control, name: anchorEntityTypePath });
+  const selectedEntityRef = useWatch({ control, name: anchorEntityRefPath });
+  const selectedEntityRefType = useWatch({
     control,
-    name: `${basePath}.mode` as Path<T>,
+    name: anchorEntityRefTypePath,
   });
+  const selectedEvent = useWatch({ control, name: anchorEventPath });
+  const offsetDays = useWatch({ control, name: offsetDaysPath });
 
-  const entityType = useWatch({
-    control,
-    name: `${basePath}.anchor.entityType` as Path<T>,
-  });
-
-  const selectedEntityId = useWatch({
-    control,
-    name: `${basePath}.anchor.entityId` as Path<T>,
-  });
-
-  const selectedEvent = useWatch({
-    control,
-    name: `${basePath}.anchor.event` as Path<T>,
-  });
-
-  const offsetDays = useWatch({
-    control,
-    name: `${basePath}.offsetDays` as Path<T>,
-  });
-
-  // 3. Flags derivados
   const isAbsolute = timeframeMode === "ABSOLUTE";
   const isRelative = timeframeMode === "RELATIVE";
   const isPromotion = timeframeMode === "PROMOTION";
 
-  // 4. Opciones de selects (migrado de useTimeframeAnchorOptions)
+  const selectedTypeGroup = useMemo(
+    () => findTypeGroup(anchorCatalog, entityType),
+    [anchorCatalog, entityType]
+  );
+  const selectedEntity = useMemo(
+    () => findEntity(selectedTypeGroup, selectedEntityRef),
+    [selectedEntityRef, selectedTypeGroup]
+  );
+
   const entityTypeOptions = useMemo(() => {
-    if (!availableTimeframes) return [];
-    return availableTimeframes.map((typeGroup: AvailableTimeframesByType) => ({
+    if (!anchorCatalog) {
+      return [];
+    }
+    return anchorCatalog.map((typeGroup: AnchorCatalogByType) => ({
       value: typeGroup.entityType,
       label: typeGroup.entityTypeLabel,
     }));
-  }, [availableTimeframes]);
+  }, [anchorCatalog]);
 
   const entityOptions = useMemo(() => {
-    if (!availableTimeframes || !entityType) return [];
-    const typeGroup = availableTimeframes.find(
-      (group: AvailableTimeframesByType) => group.entityType === entityType
-    );
-    if (!typeGroup) return [];
-    return typeGroup.entities.map((entity: AvailableTimeframeEntity) => ({
-      value: entity.entityId,
+    if (!selectedTypeGroup) {
+      return [];
+    }
+    return [...selectedTypeGroup.entities]
+      .map((entity: AnchorCatalogEntity) => ({
+      value: entity.entityRef,
       label: entity.entityLabel,
-    }));
-  }, [availableTimeframes, entityType]);
+    }))
+      .sort(sortByLabel);
+  }, [selectedTypeGroup]);
 
   const eventOptions = useMemo(() => {
-    if (!availableTimeframes || !entityType || !selectedEntityId) return [];
-    const typeGroup = availableTimeframes.find(
-      (group: AvailableTimeframesByType) => group.entityType === entityType
+    if (!selectedEntity || !entityType || !selectedEntityRef) {
+      return [];
+    }
+
+    const occurrenceByEvent = new Map(
+      (anchorOccurrences ?? [])
+        .filter(
+          (occurrence) =>
+            occurrence.entityType === entityType &&
+            occurrence.entityRef === selectedEntityRef
+        )
+        .map((occurrence) => [occurrence.event, occurrence.occurredAt])
     );
-    if (!typeGroup) return [];
-    const entity = typeGroup.entities.find(
-      (e: AvailableTimeframeEntity) => e.entityId === selectedEntityId
-    );
-    if (!entity) return [];
-    return entity.timeStamps.map((timestamp: TimeframeEventTimestamp) => ({
-      value: timestamp.event,
-      label: timestamp.eventLabel,
+
+    return selectedEntity.events.map((event: AnchorCatalogEvent) => ({
+      value: event.event,
+      label: occurrenceByEvent.get(event.event)
+        ? `${getAnchorEventLabel(entityType, event.event)} (ocurrido)`
+        : `${getAnchorEventLabel(entityType, event.event)} (pendiente)`,
     }));
-  }, [availableTimeframes, entityType, selectedEntityId]);
+  }, [anchorOccurrences, entityType, selectedEntity, selectedEntityRef]);
 
-  // 5. Fecha calculada del anchor seleccionado
-  const calculatedAnchorDate = useMemo(() => {
+  const selectedEntityExists = useMemo(
+    () => entityOptions.some((option) => option.value === selectedEntityRef),
+    [entityOptions, selectedEntityRef]
+  );
+
+  const catalogEntityRefType = selectedEntity?.entityRefType;
+
+  const selectedEventExists = useMemo(
+    () => eventOptions.some((option) => option.value === selectedEvent),
+    [eventOptions, selectedEvent]
+  );
+
+  useEffect(() => {
+    if (!isRelative) {
+      return;
+    }
+
+    if (selectedEntityRef && !selectedEntityExists) {
+      setValue(anchorEntityRefPath, "", { shouldValidate: true, shouldDirty: true });
+      setValue(anchorEntityRefTypePath, undefined, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+      return;
+    }
+
     if (
-      !availableTimeframes ||
-      !entityType ||
-      !selectedEntityId ||
-      !selectedEvent
-    )
+      selectedEntityRef &&
+      catalogEntityRefType &&
+      selectedEntityRefType !== catalogEntityRefType
+    ) {
+      setValue(anchorEntityRefTypePath, catalogEntityRefType, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+
+    if (selectedEvent && !selectedEventExists) {
+      setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+    }
+  }, [
+    anchorEntityRefPath,
+    anchorEntityRefTypePath,
+    anchorEventPath,
+    catalogEntityRefType,
+    isRelative,
+    selectedEntityExists,
+    selectedEntityRef,
+    selectedEntityRefType,
+    selectedEvent,
+    selectedEventExists,
+    setValue,
+  ]);
+
+  const handleModeChange = (mode: string) => {
+    if (mode === "RELATIVE") {
+      return;
+    }
+
+    setValue(anchorEntityTypePath, "", { shouldValidate: true, shouldDirty: true });
+    setValue(anchorEntityRefPath, "", { shouldValidate: true, shouldDirty: true });
+    setValue(anchorEntityRefTypePath, undefined, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+  };
+
+  const handleEntityTypeChange = () => {
+    setValue(anchorEntityRefPath, "", { shouldValidate: true, shouldDirty: true });
+    setValue(anchorEntityRefTypePath, undefined, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+  };
+
+  const handleEntityRefChange = (entityRef: string) => {
+    if (!selectedTypeGroup) {
+      setValue(anchorEntityRefTypePath, undefined, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+      return;
+    }
+
+    const entity = findEntity(selectedTypeGroup, entityRef);
+
+    setValue(anchorEntityRefTypePath, entity?.entityRefType, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue(anchorEventPath, "", { shouldValidate: true, shouldDirty: true });
+  };
+
+  const calculatedAnchorDate = useMemo(() => {
+    if (!anchorOccurrences || !entityType || !selectedEntityRef || !selectedEvent) {
       return null;
-
-    const typeGroup = availableTimeframes.find(
-      (group: AvailableTimeframesByType) => group.entityType === entityType
+    }
+    const occurrence = anchorOccurrences.find(
+      (value) =>
+        value.entityType === entityType &&
+        value.entityRef === selectedEntityRef &&
+        value.event === selectedEvent
     );
-    if (!typeGroup) return null;
+    return occurrence?.occurredAt ?? null;
+  }, [anchorOccurrences, entityType, selectedEntityRef, selectedEvent]);
 
-    const entity = typeGroup.entities.find(
-      (e: AvailableTimeframeEntity) => e.entityId === selectedEntityId
-    );
-    if (!entity) return null;
-
-    const eventTimestamp = entity.timeStamps.find(
-      (ts: TimeframeEventTimestamp) => ts.event === selectedEvent
-    );
-    if (!eventTimestamp || !eventTimestamp.date) return null;
-
-    return eventTimestamp.date;
-  }, [availableTimeframes, entityType, selectedEntityId, selectedEvent]);
-
-  // 6. Fecha de fin calculada (anchor + offsetDays)
   const calculatedEndDate = useMemo(() => {
-    if (!calculatedAnchorDate || !offsetDays) return null;
-
-    const anchorDate = new Date(calculatedAnchorDate);
-    if (isNaN(anchorDate.getTime())) return null;
-
-    const endDate = new Date(anchorDate);
-    endDate.setDate(endDate.getDate() + Number(offsetDays));
+    const offset = toFiniteNumber(offsetDays);
+    if (!calculatedAnchorDate || offset === undefined) {
+      return null;
+    }
+    const endDate = new Date(calculatedAnchorDate);
+    endDate.setDate(endDate.getDate() + offset);
     return endDate;
   }, [calculatedAnchorDate, offsetDays]);
 
-  // 7. Helper para obtener fecha de anchor desde availableTimeframes
-  const getAnchorDateFromTimeframes = useCallback(
-    (entType: string, entId: string, event: string): string | null => {
-      if (!availableTimeframes || !entType || !entId || !event) return null;
-
-      const typeGroup = availableTimeframes.find(
-        (group: AvailableTimeframesByType) => group.entityType === entType
-      );
-      if (!typeGroup) return null;
-
-      const entity = typeGroup.entities.find(
-        (e: AvailableTimeframeEntity) => e.entityId === entId
-      );
-      if (!entity) return null;
-
-      const eventTimestamp = entity.timeStamps.find(
-        (ts: TimeframeEventTimestamp) => ts.event === event
-      );
-      if (!eventTimestamp || !eventTimestamp.date) return null;
-
-      return eventTimestamp.date;
-    },
-    [availableTimeframes]
-  );
-
-  // 8. Handler para actualizar start/end calculados
-  // Usa getValues para leer el estado más actual (evita lag de useWatch)
-  const updateResolvedDates = useCallback(() => {
-    // Leer valores actuales del formulario
-    const currentMode = getValues(`${basePath}.mode` as Path<T>);
-    if (currentMode !== "RELATIVE") return;
-
-    const currentEntityType = getValues(`${basePath}.anchor.entityType` as Path<T>);
-    const currentEntityId = getValues(`${basePath}.anchor.entityId` as Path<T>);
-    const currentEvent = getValues(`${basePath}.anchor.event` as Path<T>);
-    const currentOffsetDays = getValues(`${basePath}.offsetDays` as Path<T>);
-
-    // Obtener fecha de anchor
-    const anchorDateStr = getAnchorDateFromTimeframes(
-      currentEntityType as string,
-      currentEntityId as string,
-      currentEvent as string
-    );
-
-    if (!anchorDateStr) {
-      setValue(`${basePath}.start` as Path<T>, null as PathValue<T, Path<T>>);
-      setValue(`${basePath}.end` as Path<T>, null as PathValue<T, Path<T>>);
-      return;
-    }
-
-    const startDate = new Date(anchorDateStr);
-    if (isNaN(startDate.getTime())) {
-      setValue(`${basePath}.start` as Path<T>, null as PathValue<T, Path<T>>);
-      setValue(`${basePath}.end` as Path<T>, null as PathValue<T, Path<T>>);
-      return;
-    }
-
-    // Establecer start como la fecha del anchor
-    setValue(`${basePath}.start` as Path<T>, startDate as PathValue<T, Path<T>>);
-
-    // Calcular y establecer end
-    if (currentOffsetDays) {
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + Number(currentOffsetDays));
-      setValue(`${basePath}.end` as Path<T>, endDate as PathValue<T, Path<T>>);
-    } else {
-      setValue(`${basePath}.end` as Path<T>, null as PathValue<T, Path<T>>);
-    }
-  }, [basePath, getAnchorDateFromTimeframes, getValues, setValue]);
-
   return {
     control,
-    // Valores observados
     timeframeMode,
     entityType,
-    selectedEntityId,
+    selectedEntityId: selectedEntityRef,
     selectedEvent,
     offsetDays,
-    // Flags
     isAbsolute,
     isRelative,
     isPromotion,
-    // Opciones de selects
+    handleModeChange,
+    handleEntityTypeChange,
+    handleEntityRefChange,
     entityTypeOptions,
     entityOptions,
     eventOptions,
-    // Fechas calculadas (para mostrar en UI)
+    selectedEntityExists,
+    selectedEventExists,
     calculatedAnchorDate,
     calculatedEndDate,
-    // Handler para actualizar start/end
-    updateResolvedDates,
   };
 }

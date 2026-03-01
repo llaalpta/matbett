@@ -7,10 +7,12 @@ import {
   FormItem,
   FormControl,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface SwitchFieldProps<
@@ -69,10 +71,12 @@ export function SwitchField<
                 containerClassName
               )}
             >
-              <div className={cn(
-                "flex items-center space-x-2",
-                disabled && "cursor-not-allowed opacity-50"
-              )}>
+              <div
+                className={cn(
+                  "flex items-start space-x-2",
+                  disabled && "cursor-not-allowed opacity-50"
+                )}
+              >
                 <FormControl>
                   <Switch
                     checked={field.value}
@@ -85,19 +89,21 @@ export function SwitchField<
                   />
                 </FormControl>
                 {label && (
-                  <FormFieldLabel
-                    label={label}
-                    required={required}
-                    tooltip={tooltip}
-                    className="cursor-pointer"
-                  />
+                  <div className="space-y-1 leading-none">
+                    <FormFieldLabel
+                      label={label}
+                      required={required}
+                      tooltip={tooltip}
+                      className="cursor-pointer"
+                    />
+                    {description && (
+                      <FormDescription className="text-sm text-muted-foreground">
+                        {description}
+                      </FormDescription>
+                    )}
+                  </div>
                 )}
               </div>
-              {description && (
-                <div className="text-sm text-muted-foreground ml-6">
-                  {description}
-                </div>
-              )}
               {displayError && <FormMessage />}
             </FormItem>
           );

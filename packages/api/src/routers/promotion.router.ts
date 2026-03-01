@@ -1,8 +1,3 @@
-/**
- * Promotion tRPC Router
- * Define procedures para operaciones CRUD de promociones
- */
-
 import { z } from 'zod';
 import {
   PromotionSchema,
@@ -10,77 +5,65 @@ import {
   PromotionListInputSchema,
   UpdatePromotionInputSchema,
   createPaginatedResponseSchema,
-  AvailableTimeframesSchema,
+  AnchorCatalogSchema,
+  AnchorOccurrencesSchema,
+  QualifyConditionEntitySchema,
 } from '@matbett/shared';
 
 import { publicProcedure, router } from '../trpc';
 
-/**
- * Router de promociones con procedures tipados
- */
 export const promotionRouter = router({
-  /**
-   * Obtener todas las promociones con paginación
-   * Compatible con TanStack Table
-   */
   list: publicProcedure
     .input(PromotionListInputSchema)
     .output(createPaginatedResponseSchema(PromotionEntitySchema))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.promotionService.list(ctx.userId, input);
-      return result;
+      return ctx.promotionService.list(ctx.userId, input);
     }),
 
-  /**
-   * Obtener una promoción por ID
-   */
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .output(PromotionEntitySchema.nullable())
     .query(async ({ ctx, input }) => {
-      const promotion = await ctx.promotionService.getById(input.id);
-      return promotion;
+      return ctx.promotionService.getById(input.id);
     }),
 
-  /**
-   * Crear nueva promoción
-   */
   create: publicProcedure
     .input(PromotionSchema)
     .output(PromotionEntitySchema)
     .mutation(async ({ ctx, input }) => {
-      const promotion = await ctx.promotionService.create(input, ctx.userId);
-      return promotion;
+      return ctx.promotionService.create(input, ctx.userId);
     }),
 
-  /**
-   * Actualizar promoción existente
-   */
   update: publicProcedure
     .input(UpdatePromotionInputSchema)
     .output(PromotionEntitySchema)
     .mutation(async ({ ctx, input }) => {
-      const promotion = await ctx.promotionService.update(input.id, input.data);
-      return promotion;
+      return ctx.promotionService.update(input.id, input.data);
     }),
 
-  /**
-   * Eliminar promoción
-   */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     await ctx.promotionService.delete(input.id);
     return { success: true };
   }),
 
-  /**
-   * Obtener timeframes disponibles para una promoción
-   * Usado para configurar timeframes relativos en cualquier nivel de la jerarquía
-   */
-  getAvailableTimeframes: publicProcedure
+  getAnchorCatalog: publicProcedure
     .input(z.object({ promotionId: z.string() }))
-    .output(AvailableTimeframesSchema)
+    .output(AnchorCatalogSchema)
     .query(async ({ ctx, input }) => {
-      const availableTimeframes = await ctx.promotionService.getAvailableTimeframes(input.promotionId);
-      return availableTimeframes;
+      return ctx.promotionService.getAnchorCatalog(input.promotionId);
+    }),
+
+  getAnchorOccurrences: publicProcedure
+    .input(z.object({ promotionId: z.string() }))
+    .output(AnchorOccurrencesSchema)
+    .query(async ({ ctx, input }) => {
+      return ctx.promotionService.getAnchorOccurrences(input.promotionId);
+    }),
+
+  getAvailableQualifyConditions: publicProcedure
+    .input(z.object({ promotionId: z.string() }))
+    .output(z.array(QualifyConditionEntitySchema))
+    .query(async ({ ctx, input }) => {
+      return ctx.promotionService.getAvailableQualifyConditions(input.promotionId);
     }),
 });

@@ -20,6 +20,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface DateTimeFieldProps<
@@ -58,7 +59,7 @@ export function DateTimeField<
         name={name}
         render={({ field, fieldState, formState }) => {
           // Handle potential raw values (string) or Date objects safely
-          const rawValue = field.value as unknown;
+          const rawValue: unknown = field.value;
           const parsedDate =
             rawValue instanceof Date
               ? rawValue
@@ -124,7 +125,7 @@ export function DateTimeField<
                       {validFieldDate ? (
                         format(validFieldDate, "MM/dd/yyyy HH:mm")
                       ) : (
-                        <span>MM/DD/YYYY HH:mm</span>
+                        <span>MM/DD/AAAA HH:mm</span>
                       )}
                       <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                     </Button>

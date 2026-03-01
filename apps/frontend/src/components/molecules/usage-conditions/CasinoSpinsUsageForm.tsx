@@ -1,14 +1,21 @@
 "use client";
 
-import type { AvailableTimeframes } from "@matbett/shared";
+import type { AnchorCatalog, AnchorOccurrences } from "@matbett/shared";
 import { FieldValues, Path, useFormContext } from "react-hook-form";
 
 import { InputField } from "@/components/atoms";
-import { TimeframeForm } from "@/components/molecules/TimeframeForm";
+import { TimeframeForm, type TimeframePaths } from "@/components/molecules/TimeframeForm";
+
+export interface CasinoSpinsUsageFormPaths<T extends FieldValues> {
+  timeframe: TimeframePaths<T>;
+  spinsCount: Path<T>;
+  gameTitle: Path<T>;
+}
 
 interface CasinoSpinsUsageFormProps<T extends FieldValues> {
-  basePath: Path<T>;
-  availableTimeframes?: AvailableTimeframes;
+  paths: CasinoSpinsUsageFormPaths<T>;
+  anchorCatalog?: AnchorCatalog;
+  anchorOccurrences?: AnchorOccurrences;
 }
 
 /**
@@ -16,8 +23,9 @@ interface CasinoSpinsUsageFormProps<T extends FieldValues> {
  * Todos los campos planos siguiendo el schema CasinoSpinsUsageConditionsSchema
  */
 export function CasinoSpinsUsageForm<T extends FieldValues>({
-  basePath,
-  availableTimeframes,
+  paths,
+  anchorCatalog,
+  anchorOccurrences,
 }: CasinoSpinsUsageFormProps<T>) {
   useFormContext<T>(); // Ensure context is available
 
@@ -25,18 +33,19 @@ export function CasinoSpinsUsageForm<T extends FieldValues>({
     <div className="space-y-4">
       {/* Timeframe */}
       <TimeframeForm<T>
-        basePath={`${basePath}.timeframe` as Path<T>}
+        paths={paths.timeframe}
         title="Plazo de uso"
         forceAbsolute={false}
         hideModeSelector={false}
-        availableTimeframes={availableTimeframes}
+        anchorCatalog={anchorCatalog}
+        anchorOccurrences={anchorOccurrences}
       />
 
-      {/* Configuración de tiradas */}
+      {/* Configuracion de tiradas */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <InputField<T>
-          name={`${basePath}.spinsCount` as Path<T>}
-          label="Número de Tiradas"
+          name={paths.spinsCount}
+          label="Número de tiradas"
           type="number"
           min={1}
           step={1}
@@ -44,8 +53,8 @@ export function CasinoSpinsUsageForm<T extends FieldValues>({
           required
         />
         <InputField<T>
-          name={`${basePath}.gameTitle` as Path<T>}
-          label="Juego Específico"
+          name={paths.gameTitle}
+          label="Juego específico"
           type="text"
           placeholder="Ej: Starburst"
         />
@@ -53,3 +62,4 @@ export function CasinoSpinsUsageForm<T extends FieldValues>({
     </div>
   );
 }
+

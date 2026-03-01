@@ -25,8 +25,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { getFieldVisualState } from "@/utils/fieldVisualState";
 import { VISUAL_STATE_WARNING_STYLES } from "@/utils/fieldStyles";
+import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface ComboboxOption {

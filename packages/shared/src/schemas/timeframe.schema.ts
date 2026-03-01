@@ -11,10 +11,6 @@ import {
 } from './enums';
 import { requiredNumber } from './utils';
 
-// =============================================
-// TIMEFRAME ANCHOR (solo referencias)
-// =============================================
-
 export const AnchorEventSchema = z.union([
   RewardAnchorEventSchema,
   PhaseAnchorEventSchema,
@@ -22,39 +18,30 @@ export const AnchorEventSchema = z.union([
   QualifyConditionAnchorEventSchema,
 ]);
 
-export const TimeframeAnchorSchema = z.object({
-  entityId: z.string(),
+export const AnchorRefTypeSchema = z.enum(['client', 'persisted']);
+
+export const TimeframeAnchorRefSchema = z.object({
   entityType: EntityTypeSchema,
+  entityRefType: AnchorRefTypeSchema,
+  entityRef: z.string(),
   event: AnchorEventSchema,
 });
 
-// =============================================
-// TIMEFRAME SCHEMAS
-// =============================================
-
 export const AbsoluteTimeframeSchema = z.object({
   mode: z.literal('ABSOLUTE'),
-  start: z.coerce.date(), // Permite Date o String ISO
+  start: z.coerce.date(),
   end: z.coerce.date().optional(),
 });
 
 export const RelativeTimeframeSchema = z.object({
   mode: z.literal('RELATIVE'),
-  anchor: TimeframeAnchorSchema,
+  anchor: TimeframeAnchorRefSchema,
   offsetDays: requiredNumber(1),
-  // start: calculated from anchor event timestamp (nullable if event hasn't occurred)
-  start: z.coerce.date().nullable().optional(),
-  // end: calculated from start + offsetDays (nullable if event hasn't occurred)
-  end: z.coerce.date().nullable().optional(),
 });
 
 export const PromotionTimeframeSchema = z.object({
   mode: z.literal('PROMOTION'),
 });
-
-// =============================================
-// TIMEFRAME (DISCRIMINATED UNION)
-// =============================================
 
 export const TimeframeSchema = z.discriminatedUnion('mode', [
   AbsoluteTimeframeSchema,
@@ -62,119 +49,112 @@ export const TimeframeSchema = z.discriminatedUnion('mode', [
   PromotionTimeframeSchema,
 ]);
 
-// =============================================
-// AVAILABLE TIMEFRAMES (OPTIONS DTO) - STRICT DISCRIMINATED UNION
-// =============================================
-
-// 1. Specific Timestamp Schemas
-const BaseTimestampSchema = z.object({
+const BaseCatalogEventSchema = z.object({
+  event: AnchorEventSchema,
   eventLabel: z.string(),
-  date: z.string(),
 });
 
-export const PromotionTimeframeEventTimestampSchema = BaseTimestampSchema.extend({
+export const PromotionCatalogEventSchema = BaseCatalogEventSchema.extend({
   event: PromotionAnchorEventSchema,
 });
 
-export const PhaseTimeframeEventTimestampSchema = BaseTimestampSchema.extend({
+export const PhaseCatalogEventSchema = BaseCatalogEventSchema.extend({
   event: PhaseAnchorEventSchema,
 });
 
-export const RewardTimeframeEventTimestampSchema = BaseTimestampSchema.extend({
+export const RewardCatalogEventSchema = BaseCatalogEventSchema.extend({
   event: RewardAnchorEventSchema,
 });
 
-export const QualifyConditionTimeframeEventTimestampSchema = BaseTimestampSchema.extend({
+export const QualifyConditionCatalogEventSchema = BaseCatalogEventSchema.extend({
   event: QualifyConditionAnchorEventSchema,
 });
 
-// Union for generic usage
-export const TimeframeEventTimestampSchema = z.union([
-  PromotionTimeframeEventTimestampSchema,
-  PhaseTimeframeEventTimestampSchema,
-  RewardTimeframeEventTimestampSchema,
-  QualifyConditionTimeframeEventTimestampSchema,
+export const AnchorCatalogEventSchema = z.union([
+  PromotionCatalogEventSchema,
+  PhaseCatalogEventSchema,
+  RewardCatalogEventSchema,
+  QualifyConditionCatalogEventSchema,
 ]);
 
-// 2. Specific Entity Schemas
-const BaseEntitySchema = z.object({
-  entityId: z.string(),
+const BaseCatalogEntitySchema = z.object({
+  entityRefType: AnchorRefTypeSchema,
+  entityRef: z.string(),
   entityLabel: z.string(),
 });
 
-export const AvailablePromotionTimeframeEntitySchema = BaseEntitySchema.extend({
-  timeStamps: z.array(PromotionTimeframeEventTimestampSchema),
+export const PromotionAnchorCatalogEntitySchema = BaseCatalogEntitySchema.extend({
+  events: z.array(PromotionCatalogEventSchema),
 });
 
-export const AvailablePhaseTimeframeEntitySchema = BaseEntitySchema.extend({
-  timeStamps: z.array(PhaseTimeframeEventTimestampSchema),
+export const PhaseAnchorCatalogEntitySchema = BaseCatalogEntitySchema.extend({
+  events: z.array(PhaseCatalogEventSchema),
 });
 
-export const AvailableRewardTimeframeEntitySchema = BaseEntitySchema.extend({
-  timeStamps: z.array(RewardTimeframeEventTimestampSchema),
+export const RewardAnchorCatalogEntitySchema = BaseCatalogEntitySchema.extend({
+  events: z.array(RewardCatalogEventSchema),
 });
 
-export const AvailableQualifyConditionTimeframeEntitySchema = BaseEntitySchema.extend({
-  timeStamps: z.array(QualifyConditionTimeframeEventTimestampSchema),
+export const QualifyConditionAnchorCatalogEntitySchema = BaseCatalogEntitySchema.extend({
+  events: z.array(QualifyConditionCatalogEventSchema),
 });
 
-// Union for generic usage
-export const AvailableTimeframeEntitySchema = z.union([
-  AvailablePromotionTimeframeEntitySchema,
-  AvailablePhaseTimeframeEntitySchema,
-  AvailableRewardTimeframeEntitySchema,
-  AvailableQualifyConditionTimeframeEntitySchema,
+export const AnchorCatalogEntitySchema = z.union([
+  PromotionAnchorCatalogEntitySchema,
+  PhaseAnchorCatalogEntitySchema,
+  RewardAnchorCatalogEntitySchema,
+  QualifyConditionAnchorCatalogEntitySchema,
 ]);
 
-// 3. Specific ByType Schemas (The Discriminated Parts)
-export const AvailablePromotionTimeframesSchema = z.object({
+export const PromotionAnchorCatalogByTypeSchema = z.object({
   entityType: z.literal('PROMOTION'),
   entityTypeLabel: z.string(),
-  entities: z.array(AvailablePromotionTimeframeEntitySchema),
+  entities: z.array(PromotionAnchorCatalogEntitySchema),
 });
 
-export const AvailablePhaseTimeframesSchema = z.object({
+export const PhaseAnchorCatalogByTypeSchema = z.object({
   entityType: z.literal('PHASE'),
   entityTypeLabel: z.string(),
-  entities: z.array(AvailablePhaseTimeframeEntitySchema),
+  entities: z.array(PhaseAnchorCatalogEntitySchema),
 });
 
-export const AvailableRewardTimeframesSchema = z.object({
+export const RewardAnchorCatalogByTypeSchema = z.object({
   entityType: z.literal('REWARD'),
   entityTypeLabel: z.string(),
-  entities: z.array(AvailableRewardTimeframeEntitySchema),
+  entities: z.array(RewardAnchorCatalogEntitySchema),
 });
 
-export const AvailableQualifyConditionTimeframesSchema = z.object({
+export const QualifyConditionAnchorCatalogByTypeSchema = z.object({
   entityType: z.literal('QUALIFY_CONDITION'),
   entityTypeLabel: z.string(),
-  entities: z.array(AvailableQualifyConditionTimeframeEntitySchema),
+  entities: z.array(QualifyConditionAnchorCatalogEntitySchema),
 });
 
-// 4. The Discriminated Union
-export const AvailableTimeframesByTypeSchema = z.discriminatedUnion('entityType', [
-  AvailablePromotionTimeframesSchema,
-  AvailablePhaseTimeframesSchema,
-  AvailableRewardTimeframesSchema,
-  AvailableQualifyConditionTimeframesSchema,
+export const AnchorCatalogByTypeSchema = z.discriminatedUnion('entityType', [
+  PromotionAnchorCatalogByTypeSchema,
+  PhaseAnchorCatalogByTypeSchema,
+  RewardAnchorCatalogByTypeSchema,
+  QualifyConditionAnchorCatalogByTypeSchema,
 ]);
 
-export const AvailableTimeframesSchema = z.array(AvailableTimeframesByTypeSchema);
+export const AnchorCatalogSchema = z.array(AnchorCatalogByTypeSchema);
 
-// =============================================
-// INFERRED TYPES
-// =============================================
+export const AnchorOccurrenceSchema = TimeframeAnchorRefSchema.extend({
+  occurredAt: z.date().nullable(),
+});
+
+export const AnchorOccurrencesSchema = z.array(AnchorOccurrenceSchema);
 
 export type AnchorEvent = z.infer<typeof AnchorEventSchema>;
-export type TimeframeAnchor = z.infer<typeof TimeframeAnchorSchema>;
+export type AnchorRefType = z.infer<typeof AnchorRefTypeSchema>;
+export type TimeframeAnchorRef = z.infer<typeof TimeframeAnchorRefSchema>;
 export type AbsoluteTimeframe = z.infer<typeof AbsoluteTimeframeSchema>;
 export type RelativeTimeframe = z.infer<typeof RelativeTimeframeSchema>;
 export type PromotionTimeframe = z.infer<typeof PromotionTimeframeSchema>;
 export type Timeframe = z.infer<typeof TimeframeSchema>;
-
-// DTO Types - Unions for generic usage
-export type TimeframeEventTimestamp = z.infer<typeof TimeframeEventTimestampSchema>;
-export type AvailableTimeframeEntity = z.infer<typeof AvailableTimeframeEntitySchema>;
-// The discriminated union type
-export type AvailableTimeframesByType = z.infer<typeof AvailableTimeframesByTypeSchema>;
-export type AvailableTimeframes = z.infer<typeof AvailableTimeframesSchema>;
+export type AnchorCatalogEvent = z.infer<typeof AnchorCatalogEventSchema>;
+export type AnchorCatalogEntity = z.infer<typeof AnchorCatalogEntitySchema>;
+export type AnchorCatalogByType = z.infer<typeof AnchorCatalogByTypeSchema>;
+export type AnchorCatalog = z.infer<typeof AnchorCatalogSchema>;
+export type AnchorOccurrence = z.infer<typeof AnchorOccurrenceSchema>;
+export type AnchorOccurrences = z.infer<typeof AnchorOccurrencesSchema>;

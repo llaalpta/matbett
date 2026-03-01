@@ -1,41 +1,103 @@
 "use client";
 
-import { cashbackCalculationMethodOptions, requiredBetOutcomeOptions } from "@matbett/shared";
+import { cashbackCalculationMethodOptions } from "@matbett/shared";
 import { Control, FieldValues, Path, useWatch } from "react-hook-form";
 
-import { CheckboxField, InputField, SelectField, TextareaField } from "@/components/atoms";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { CheckboxField, InputField, SelectField } from "@/components/atoms";
+import {
+  BetLiveOddsCheckbox,
+  BetOddsRestrictionFields,
+  BetOnlyFirstBetCheckbox,
+  BetRequiredOutcomeField,
+  BetStakeRestrictionFields,
+  BetTextRestrictionsFields,
+  type BetRestrictionsPaths,
+} from "@/components/molecules/BetRestrictionsBlock";
+
+export interface LossesCashbackConditionPaths<T extends FieldValues>
+  extends BetRestrictionsPaths<T> {
+  cashbackPercentage: Path<T>;
+  maxCashbackAmount: Path<T>;
+  calculationMethod: Path<T>;
+  calculationPeriod: Path<T>;
+  returnedBetsCountForCashback: Path<T>;
+  cashoutBetsCountForCashback: Path<T>;
+  countOnlySettledBets: Path<T>;
+  stakeMin: Path<T>;
+  stakeMax: Path<T>;
+  oddsMin: Path<T>;
+  oddsMax: Path<T>;
+  requiredBetOutcome: Path<T>;
+  allowLiveOddsChanges: Path<T>;
+  onlyFirstBetCounts: Path<T>;
+  allowMultipleBets: Path<T>;
+  multipleMinSelections: Path<T>;
+  multipleMaxSelections: Path<T>;
+  multipleMinOddsPerSelection: Path<T>;
+  multipleMaxOddsPerSelection: Path<T>;
+  betTypeRestrictions: Path<T>;
+  selectionRestrictions: Path<T>;
+  otherRestrictions: Path<T>;
+}
 
 interface LossesCashbackConditionProps<T extends FieldValues> {
   control: Control<T>;
-  basePath: Path<T>;
+  paths: LossesCashbackConditionPaths<T>;
 }
 
 export function LossesCashbackCondition<T extends FieldValues>({
   control,
-  basePath,
+  paths,
 }: LossesCashbackConditionProps<T>) {
   const allowMultipleBets = useWatch({
     control,
-    name: `${basePath}.conditions.allowMultipleBets` as Path<T>,
+    name: paths.allowMultipleBets,
   });
 
   return (
     <div className="space-y-4">
-      {/* 1. Configuración de Cashback */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <CheckboxField<T>
+          control={control}
+          name={paths.countOnlySettledBets}
+          label="Sólo cuentan para cashback las apuestas liquidadas"
+        />
+        <CheckboxField<T>
+          control={control}
+          name={paths.returnedBetsCountForCashback}
+          label="Las apuestas devueltas cuentan para cashback"
+        />
+        <CheckboxField<T>
+          control={control}
+          name={paths.cashoutBetsCountForCashback}
+          label="Las apuestas con cashout cuentan para cashback"
+        />
+        <BetLiveOddsCheckbox<T> path={paths.allowLiveOddsChanges} />
+        <BetOnlyFirstBetCheckbox<T> path={paths.onlyFirstBetCounts} />
+        <CheckboxField<T>
+          control={control}
+          name={paths.allowMultipleBets}
+          label="Se permiten apuestas combinadas"
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <InputField<T>
           control={control}
-          name={`${basePath}.conditions.cashbackPercentage` as Path<T>}
-          label="Porcentaje de Cashback (%)"
+          name={paths.cashbackPercentage}
+          label="Porcentaje de cashback aplicado (%)"
           type="number"
           placeholder="100"
+          min={0}
+          max={100}
+          step={1}
+          tooltip="Porcentaje entero (0-100) aplicado sobre la base de calculo seleccionada."
           required
         />
         <InputField<T>
           control={control}
-          name={`${basePath}.conditions.maxCashbackAmount` as Path<T>}
-          label="Cashback Máximo (€)"
+          name={paths.maxCashbackAmount}
+          label="Cashback máximo obtenible (EUR)"
           type="number"
           placeholder="50"
           required
@@ -45,132 +107,76 @@ export function LossesCashbackCondition<T extends FieldValues>({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SelectField<T>
           control={control}
-          name={`${basePath}.conditions.calculationMethod` as Path<T>}
-          label="Método de Cálculo"
+          name={paths.calculationMethod}
+          label="Base de calculo del cashback"
+          tooltip="Define sobre que importe se aplica el porcentaje de cashback."
           options={cashbackCalculationMethodOptions}
           required
         />
         <InputField<T>
           control={control}
-          name={`${basePath}.conditions.calculationPeriod` as Path<T>}
-          label="Periodo de Cálculo"
-          placeholder="Ej: Fin de semana, Lunes a Viernes"
+          name={paths.calculationPeriod}
+          label="Periodo de calculo de perdidas"
+          placeholder="Ej: fin de semana, lunes a viernes"
         />
       </div>
 
-      {/* 2. Restricciones de Apuesta (Opcionales) */}
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="bet-restrictions" className="border rounded-md px-4">
-          <AccordionTrigger className="hover:no-underline py-3">
-            <span className="text-sm font-medium">Restricciones de Apuesta (Opcional)</span>
-          </AccordionTrigger>
-          <AccordionContent className="pt-2 pb-4 space-y-4">
-            <p className="text-xs text-muted-foreground mb-2">
-              Si se definen, el cashback solo aplicará si las apuestas pérdidas cumplen estas condiciones.
-            </p>
+      <BetStakeRestrictionFields<T>
+        paths={{
+          stakeMin: paths.stakeMin,
+          stakeMax: paths.stakeMax,
+        }}
+      />
+      <BetOddsRestrictionFields<T>
+        paths={{
+          oddsMin: paths.oddsMin,
+          oddsMax: paths.oddsMax,
+        }}
+      />
+      <BetRequiredOutcomeField<T> path={paths.requiredBetOutcome} />
 
-            {/* Restricciones de Cuota */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField<T>
-                control={control}
-                name={`${basePath}.conditions.oddsRestriction.minOdds` as Path<T>}
-                label="Cuota Mínima"
-                type="number"
-                step={0.01}
-                placeholder="1.50"
-              />
-              <InputField<T>
-                control={control}
-                name={`${basePath}.conditions.oddsRestriction.maxOdds` as Path<T>}
-                label="Cuota Máxima"
-                type="number"
-                step={0.01}
-                placeholder="Sin límite"
-              />
-            </div>
+      {allowMultipleBets ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <InputField<T>
+            control={control}
+            name={paths.multipleMinSelections}
+            label="Número mínimo de selecciones en apuestas combinadas"
+            type="number"
+            placeholder="2"
+          />
+          <InputField<T>
+            control={control}
+            name={paths.multipleMaxSelections}
+            label="Numero máximo de selecciones en apuestas combinadas"
+            type="number"
+            placeholder="Sin límite"
+          />
+          <InputField<T>
+            control={control}
+            name={paths.multipleMinOddsPerSelection}
+            label="Cuota mínima permitida por selección en apuestas combinadas"
+            type="number"
+            step={0.01}
+            placeholder="1.20"
+          />
+          <InputField<T>
+            control={control}
+            name={paths.multipleMaxOddsPerSelection}
+            label="Cuota máxima permitida por selección en apuestas combinadas"
+            type="number"
+            step={0.01}
+            placeholder="Sin límite"
+          />
+        </div>
+      ) : null}
 
-            {/* Restricciones de Stake */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField<T>
-                control={control}
-                name={`${basePath}.conditions.stakeRestriction.minStake` as Path<T>}
-                label="Apuesta Mínima (€)"
-                type="number"
-                step={0.01}
-                placeholder="10"
-              />
-              <InputField<T>
-                control={control}
-                name={`${basePath}.conditions.stakeRestriction.maxStake` as Path<T>}
-                label="Apuesta Máxima (€)"
-                type="number"
-                step={0.01}
-                placeholder="Sin límite"
-              />
-            </div>
-
-            {/* Configuración de Resultado */}
-            <SelectField<T>
-              control={control}
-              name={`${basePath}.conditions.requiredBetOutcome` as Path<T>}
-              label="Resultado Requerido"
-              options={requiredBetOutcomeOptions}
-              placeholder="Cualquiera (por defecto)"
-            />
-
-            {/* Tipo de Apuesta - Combinadas */}
-            <CheckboxField<T>
-              control={control}
-              name={`${basePath}.conditions.allowMultipleBets` as Path<T>}
-              label="Permitir Apuestas Combinadas"
-            />
-
-            {allowMultipleBets && (
-              <div className="grid grid-cols-1 gap-4 rounded-md border border-border/40 bg-muted/20 p-4 md:grid-cols-2">
-                <InputField<T>
-                  control={control}
-                  name={`${basePath}.conditions.multipleBetCondition.minSelections` as Path<T>}
-                  label="Mín. Selecciones"
-                  type="number"
-                  placeholder="2"
-                />
-                <InputField<T>
-                  control={control}
-                  name={`${basePath}.conditions.multipleBetCondition.maxSelections` as Path<T>}
-                  label="Máx. Selecciones"
-                  type="number"
-                  placeholder="Sin límite"
-                />
-                <InputField<T>
-                  control={control}
-                  name={`${basePath}.conditions.multipleBetCondition.minOddsPerSelection` as Path<T>}
-                  label="Cuota Mín. Sel."
-                  type="number"
-                  step={0.01}
-                  placeholder="1.20"
-                />
-              </div>
-            )}
-            
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <TextareaField<T>
-                    control={control}
-                    name={`${basePath}.conditions.betTypeRestrictions` as Path<T>}
-                    label="Restricciones de Tipo"
-                    placeholder="Ej: Solo simples"
-                    rows={2}
-                />
-                <TextareaField<T>
-                    control={control}
-                    name={`${basePath}.conditions.selectionRestrictions` as Path<T>}
-                    label="Restricciones de Selección"
-                    placeholder="Ej: Solo fútbol"
-                    rows={2}
-                />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      <BetTextRestrictionsFields<T>
+        paths={{
+          betTypeRestrictions: paths.betTypeRestrictions,
+          selectionRestrictions: paths.selectionRestrictions,
+          otherRestrictions: paths.otherRestrictions,
+        }}
+      />
     </div>
   );
 }

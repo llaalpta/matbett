@@ -1,49 +1,53 @@
 "use client";
 
-import { Control, FieldValues, Path, useWatch } from "react-hook-form";
 import { FileText } from "lucide-react";
+import { Control, FieldValues, Path, useWatch } from "react-hook-form";
 
 import { InputField, SwitchField } from "@/components/atoms";
 import { Button } from "@/components/ui/button";
+export interface DepositConditionPaths<T extends FieldValues> {
+  contributesToRewardValue: Path<T>;
+  bonusPercentage: Path<T>;
+  maxBonusAmount: Path<T>;
+  minAmount: Path<T>;
+  maxAmount: Path<T>;
+  targetAmount: Path<T>;
+  depositCode: Path<T>;
+  firstDepositOnly: Path<T>;
+}
 
 interface DepositConditionProps<T extends FieldValues> {
   control: Control<T>;
-  basePath: Path<T>;
+  paths: DepositConditionPaths<T>;
   onViewTracking?: () => void; // Callback to open tracking modal
   isEditing?: boolean; // Only show tracking button when editing
-  onValueTypeChange?: (value: boolean) => void;
-  rewardValueType?: string; // Para saber si mostrar el switch de contributesToRewardValue
-  rewardHasContributingCondition?: boolean; // Para deshabilitar el switch si otra condition ya está marcada
 }
 
 export function DepositCondition<T extends FieldValues>({
   control,
-  basePath,
+  paths,
   onViewTracking,
   isEditing = false,
-  onValueTypeChange,
-  rewardValueType,
-  rewardHasContributingCondition = false,
 }: DepositConditionProps<T>) {
   // Watchers
   const contributesToRewardValue = useWatch({
     control,
-    name: `${basePath}.conditions.contributesToRewardValue` as Path<T>,
+    name: paths.contributesToRewardValue,
   });
 
   const bonusPercentage = useWatch({
     control,
-    name: `${basePath}.conditions.bonusPercentage` as Path<T>,
+    name: paths.bonusPercentage,
   });
 
   const maxBonusAmount = useWatch({
     control,
-    name: `${basePath}.conditions.maxBonusAmount` as Path<T>,
+    name: paths.maxBonusAmount,
   });
 
   const minAmount = useWatch({
     control,
-    name: `${basePath}.conditions.minAmount` as Path<T>,
+    name: paths.minAmount,
   });
 
   return (
@@ -58,40 +62,22 @@ export function DepositCondition<T extends FieldValues>({
             onClick={onViewTracking}
           >
             <FileText className="mr-2 h-4 w-4" />
-            Ver Tracking de Depósitos
+            Ver Tracking de Depositos
           </Button>
         </div>
       )}
 
-      {/* Discriminador de Tipo de Valor - Solo visible si reward.valueType es CALCULATED */}
-      {rewardValueType === "CALCULATED_FROM_CONDITIONS" && (
-        <div className="rounded-md border border-border/60 bg-accent/5 p-4">
-          <SwitchField<T>
-            control={control}
-            name={`${basePath}.conditions.contributesToRewardValue` as Path<T>}
-            label="El valor de la reward depende de esta condición"
-            description={
-              contributesToRewardValue || !rewardHasContributingCondition
-                ? "Si está activado, el valor se calculará basándose en el depósito realizado"
-                : "Otra condición ya está marcada para calcular el valor"
-            }
-            disabled={!contributesToRewardValue && rewardHasContributingCondition}
-            onValueChange={onValueTypeChange}
-          />
-        </div>
-      )}
-
-      {/* Campos según tipo de valor */}
+      {/* Campos segun tipo de valor */}
       {!contributesToRewardValue ? (
         /* VALOR FIJO */
-        <div className="rounded-md border border-border/40 bg-muted/20 p-4 space-y-4">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">
-            Configuración de Depósito (Valor Fijo)
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium text-muted-foreground">
+            Configuración de depósito (Valor fijado en la promoción)
           </h4>
           <InputField<T>
             control={control}
-            name={`${basePath}.conditions.targetAmount` as Path<T>}
-            label="Depósito Requerido (€)"
+            name={paths.targetAmount}
+            label="Importe de deposito requerido (EUR)"
             type="number"
             step={0.01}
             placeholder="50"
@@ -102,17 +88,17 @@ export function DepositCondition<T extends FieldValues>({
         </div>
       ) : (
         /* VALOR CALCULADO */
-        <div className="rounded-md border border-border/40 bg-muted/20 p-4 space-y-4">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">
-            Configuración de Depósito (Valor Calculado)
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium text-muted-foreground">
+            Configuración de depósito (Valor calculado)
           </h4>
 
-          {/* Restricciones de depósito */}
+          {/* Restricciones de deposito */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <InputField<T>
               control={control}
-              name={`${basePath}.conditions.minAmount` as Path<T>}
-              label="Depósito Mínimo (€)"
+              name={paths.minAmount}
+              label="Importe mínimo de depósito (EUR)"
               type="number"
               step={0.01}
               placeholder="20"
@@ -122,8 +108,8 @@ export function DepositCondition<T extends FieldValues>({
             />
             <InputField<T>
               control={control}
-              name={`${basePath}.conditions.maxAmount` as Path<T>}
-              label="Depósito Máximo (€)"
+              name={paths.maxAmount}
+              label="Importe máximo de depósito (EUR)"
               type="number"
               step={0.01}
               placeholder="Sin límite"
@@ -132,24 +118,24 @@ export function DepositCondition<T extends FieldValues>({
             />
           </div>
 
-          {/* Cálculo del bonus */}
+          {/* Calculo del bonus */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <InputField<T>
               control={control}
-              name={`${basePath}.conditions.bonusPercentage` as Path<T>}
-              label="Porcentaje de Bonus (%)"
+              name={paths.bonusPercentage}
+              label="Porcentaje de bonus sobre deposito (%)"
               type="number"
               step={0.01}
               placeholder="100"
               min={0}
               max={500}
-              tooltip="% del depósito que se devuelve como bonus (ej: 100% = igual al depósito)"
+              tooltip="% del deposito que se devuelve como bonus (ej: 100% = igual al deposito)"
               required
             />
             <InputField<T>
               control={control}
-              name={`${basePath}.conditions.maxBonusAmount` as Path<T>}
-              label="Bonus Máximo (€)"
+              name={paths.maxBonusAmount}
+              label="Bonus máximo obtenible (EUR)"
               type="number"
               step={0.01}
               placeholder="50"
@@ -159,19 +145,19 @@ export function DepositCondition<T extends FieldValues>({
             />
           </div>
 
-          {/* Warning de depósito óptimo */}
+          {/* Warning de deposito optimo */}
           {bonusPercentage > 0 && maxBonusAmount > 0 && (
             <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-3 text-sm">
               <p className="font-medium text-blue-900 dark:text-blue-100">
-                💡 Depósito óptimo: €{(maxBonusAmount / (bonusPercentage / 100)).toFixed(2)}
+                Deposito optimo: EUR{(maxBonusAmount / (bonusPercentage / 100)).toFixed(2)}
               </p>
               <p className="mt-1 text-blue-700 dark:text-blue-300">
-                Con {bonusPercentage}% de bonus y máximo de €{maxBonusAmount},
-                depositar más de €{(maxBonusAmount / (bonusPercentage / 100)).toFixed(2)} no aumentará el bonus.
+                Con {bonusPercentage}% de bonus y máximo de EUR{maxBonusAmount},
+                depositar mas de EUR{(maxBonusAmount / (bonusPercentage / 100)).toFixed(2)} no aumentara el bonus.
               </p>
               {minAmount && minAmount > (maxBonusAmount / (bonusPercentage / 100)) && (
                 <p className="mt-2 text-amber-700 dark:text-amber-300 font-medium">
-                  ⚠️ Advertencia: El depósito mínimo (€{minAmount}) es mayor que el depósito óptimo.
+                  Advertencia: El depósito mínimo (EUR{minAmount}) es mayor que el depósito óptimo.
                 </p>
               )}
             </div>
@@ -180,15 +166,15 @@ export function DepositCondition<T extends FieldValues>({
       )}
 
       {/* Campos comunes (siempre visibles) */}
-      <div className="rounded-md border border-border/40 bg-muted/20 p-4 space-y-4">
-        <h4 className="text-sm font-medium text-muted-foreground mb-2">
-          Configuración Adicional
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-muted-foreground">
+            Configuración adicional
         </h4>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <InputField<T>
             control={control}
-            name={`${basePath}.conditions.depositCode` as Path<T>}
-            label="Código de Depósito"
+            name={paths.depositCode}
+            label="Código promocional de depósito"
             placeholder="WELCOME50"
             tooltip="Código promocional opcional que debe usar el usuario"
           />
@@ -196,8 +182,8 @@ export function DepositCondition<T extends FieldValues>({
           <div className="flex items-end pb-2">
             <SwitchField<T>
               control={control}
-              name={`${basePath}.conditions.firstDepositOnly` as Path<T>}
-              label="Solo válido para primer depósito"
+              name={paths.firstDepositOnly}
+              label="Sólo cuenta el primer depósito para cumplir esta condición"
             />
           </div>
         </div>

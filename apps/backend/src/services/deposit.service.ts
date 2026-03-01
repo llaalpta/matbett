@@ -2,13 +2,24 @@
  * Deposit Service
  * Business logic for deposits, including complex transactional effects.
  */
-import { DepositSchema, DepositQualifyConditionSchema, type Deposit, type DepositEntity, type DepositListInput, type PaginatedResponse } from '@matbett/shared';
+import {
+  DepositSchema,
+  DeleteDepositResultSchema,
+  DepositQualifyConditionSchema,
+  PromotionContextSchema,
+  QualifyTrackingStatusSchema,
+  type Deposit,
+  type DeleteDepositResult,
+  type DepositEntity,
+  type DepositListInput,
+  type PaginatedResponse,
+} from '@matbett/shared';
 import type { IDepositService } from '@matbett/api';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { DepositRepository } from '@/repositories/deposit.repository';
 import { BookmakerAccountRepository } from '@/repositories/bookmaker-account.repository';
-import { toDepositCreateInput, toDepositUpdateInput, toDepositEntity } from '@/lib/transformers/deposit.transformer';
+import { toDepositCreateInput, toDepositEntity } from '@/lib/transformers/deposit.transformer';
 import { AppError, BadRequestError } from '@/utils/errors';
 
 export class DepositService implements IDepositService {
@@ -18,6 +29,173 @@ export class DepositService implements IDepositService {
   constructor() {
     this.repository = new DepositRepository();
     this.bookmakerAccountRepository = new BookmakerAccountRepository();
+  }
+
+  private getTrackingStatus(trackingData: unknown) {
+    if (!trackingData || typeof trackingData !== 'object') {
+      return 'IN_PROGRESS' as const;
+    }
+    if (!('status' in trackingData)) {
+      return 'IN_PROGRESS' as const;
+    }
+    const parsed = QualifyTrackingStatusSchema.safeParse(trackingData.status);
+    if (!parsed.success) {
+      return 'IN_PROGRESS' as const;
+    }
+    return parsed.data;
+  }
+
+  private async updateBookmakerBalance(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    bookmaker: string,
+    amountDelta: number
+  ) {
+    if (amountDelta === 0) {
+      return;
+    }
+    const bookmakerAccount = await tx.bookmakerAccount.findFirst({
+      where: { userId, bookmaker },
+    });
+    if (!bookmakerAccount) {
+      throw new BadRequestError(`Bookmaker account for ${bookmaker} not found.`);
+    }
+    await tx.bookmakerAccount.update({
+      where: { id: bookmakerAccount.id },
+      data: { realBalance: { increment: amountDelta } },
+    });
+  }
+
+  private async applyContextBalanceDelta(
+    tx: Prisma.TransactionClient,
+    qualifyConditionId: string,
+    amountDelta: number
+  ) {
+    if (amountDelta === 0) {
+      return;
+    }
+
+    const condition = await tx.rewardQualifyCondition.findUnique({
+      where: { id: qualifyConditionId },
+      include: {
+        rewards: { select: { id: true, phaseId: true, promotionId: true } },
+      },
+    });
+
+    if (!condition) {
+      throw new AppError('Qualify condition not found', 404);
+    }
+
+    const phaseIds = new Set(condition.rewards.map((reward) => reward.phaseId));
+    const promotionIds = new Set(condition.rewards.map((reward) => reward.promotionId));
+
+    await tx.rewardQualifyCondition.update({
+      where: { id: qualifyConditionId },
+      data: { balance: { increment: amountDelta } },
+    });
+
+    for (const reward of condition.rewards) {
+      await tx.reward.update({
+        where: { id: reward.id },
+        data: { totalBalance: { increment: amountDelta } },
+      });
+    }
+    for (const phaseId of phaseIds) {
+      await tx.phase.update({
+        where: { id: phaseId },
+        data: { totalBalance: { increment: amountDelta } },
+      });
+    }
+    for (const promotionId of promotionIds) {
+      await tx.promotion.update({
+        where: { id: promotionId },
+        data: { totalBalance: { increment: amountDelta } },
+      });
+    }
+  }
+
+  private async updateConditionTrackingAndRewardValue(
+    tx: Prisma.TransactionClient,
+    qualifyConditionId: string,
+    depositData: {
+      amount: number;
+      date: Date;
+      code?: string;
+      depositId: string;
+    } | null
+  ) {
+    const condition = await tx.rewardQualifyCondition.findUnique({
+      where: { id: qualifyConditionId },
+      include: {
+        rewards: { select: { id: true, valueType: true } },
+      },
+    });
+
+    if (!condition) {
+      throw new AppError('Qualify condition not found', 404);
+    }
+    if (condition.type !== 'DEPOSIT') {
+      throw new BadRequestError('This is not a DEPOSIT condition.');
+    }
+
+    const conditionData = DepositQualifyConditionSchema.parse(condition.conditions);
+
+    await tx.rewardQualifyCondition.update({
+      where: { id: qualifyConditionId },
+      data: {
+        balance: depositData?.amount ?? 0,
+        trackingData: depositData
+          ? {
+              type: 'DEPOSIT',
+              status: this.getTrackingStatus(condition.trackingData),
+              qualifyingDepositId: depositData.depositId,
+              depositAmount: depositData.amount,
+              depositCode: depositData.code,
+              depositedAt: depositData.date,
+            }
+          : Prisma.DbNull,
+      },
+    });
+
+    if (!conditionData.conditions.contributesToRewardValue) {
+      return;
+    }
+
+    const rewardToUpdate = condition.rewards.find(
+      (reward) => reward.valueType === 'CALCULATED_FROM_CONDITIONS'
+    );
+    if (!rewardToUpdate) {
+      return;
+    }
+
+    const minAmount = conditionData.conditions.minAmount;
+    const bonusPercentage = conditionData.conditions.bonusPercentage;
+    const maxBonusAmount = conditionData.conditions.maxBonusAmount;
+
+    if (
+      minAmount === undefined ||
+      bonusPercentage === undefined ||
+      maxBonusAmount === undefined
+    ) {
+      throw new BadRequestError('Deposit condition bonus fields are required.');
+    }
+
+    let calculatedValue = 0;
+    if (depositData && depositData.amount >= minAmount) {
+      const effectiveAmount = Math.min(
+        depositData.amount,
+        conditionData.conditions.maxAmount || Infinity
+      );
+      calculatedValue = Math.min(
+        (effectiveAmount * bonusPercentage) / 100,
+        maxBonusAmount
+      );
+    }
+
+    await tx.reward.update({
+      where: { id: rewardToUpdate.id },
+      data: { value: calculatedValue },
+    });
   }
 
   /**
@@ -126,36 +304,41 @@ export class DepositService implements IDepositService {
 
   private async createContextualDeposit(data: Deposit, userId: string, qualifyConditionId: string): Promise<DepositEntity> {
     return prisma.$transaction(async (tx) => {
+      const existingContextual = await tx.deposit.findFirst({
+        where: { qualifyConditionId },
+        select: { id: true },
+      });
+      if (existingContextual) {
+        throw new BadRequestError(
+          'This qualify condition already has a qualifying deposit. Edit the existing deposit instead.'
+        );
+      }
+
       // 1. Fetch condition with its parent hierarchy for cascading updates
       const condition = await tx.rewardQualifyCondition.findUnique({
         where: { id: qualifyConditionId },
         include: {
-          rewards: { select: { id: true, valueType: true } },
-          phase: { select: { id: true, promotionId: true } },
+          rewards: { select: { id: true, valueType: true, phaseId: true, promotionId: true } },
         },
       });
 
-      if (!condition) throw new AppError('Qualify condition not found', 404);
-      if (condition.type !== 'DEPOSIT') throw new BadRequestError('This is not a DEPOSIT condition.');
+      if (!condition) {throw new AppError('Qualify condition not found', 404);}
+      if (condition.type !== 'DEPOSIT') {throw new BadRequestError('This is not a DEPOSIT condition.');}
 
-      // --- Validation Logic ---
+      // --- Business logic (manual status management) ---
       const conditionData = DepositQualifyConditionSchema.parse(condition.conditions);
-      let isFulfilled = true;
+      let canRecalculateRewardValue = false;
 
-      // Check amount based on type
       if (conditionData.conditions.contributesToRewardValue) {
-        // CALCULATED VALUE: check minAmount
-        if (data.amount < conditionData.conditions.minAmount) isFulfilled = false;
-      } else {
-        // FIXED VALUE: check targetAmount
-        if (data.amount !== conditionData.conditions.targetAmount) isFulfilled = false;
+        const minAmount = conditionData.conditions.minAmount;
+        if (minAmount === undefined) {
+          throw new BadRequestError('Deposit condition minAmount is required.');
+        }
+        canRecalculateRewardValue = data.amount >= minAmount;
       }
 
-      // Check deposit code (common to both types)
-      if (conditionData.conditions.depositCode && data.code !== conditionData.conditions.depositCode) {
-        isFulfilled = false;
-      }
-      // TODO: Validate timeframe
+      // timeframe, firstDepositOnly and depositCode are user-managed signals.
+      // We store facts and leave status decisions to the user.
 
       // 2. Create the Deposit
       const newDeposit = await tx.deposit.create({
@@ -173,7 +356,7 @@ export class DepositService implements IDepositService {
       const bookmakerAccount = await tx.bookmakerAccount.findFirst({
         where: { userId, bookmaker: newDeposit.bookmaker },
       });
-      if (!bookmakerAccount) throw new BadRequestError(`Bookmaker account for ${newDeposit.bookmaker} not found.`);
+      if (!bookmakerAccount) {throw new BadRequestError(`Bookmaker account for ${newDeposit.bookmaker} not found.`);}
       await tx.bookmakerAccount.update({
         where: { id: bookmakerAccount.id },
         data: { realBalance: { increment: newDeposit.amount } },
@@ -185,11 +368,10 @@ export class DepositService implements IDepositService {
       await tx.rewardQualifyCondition.update({
         where: { id: qualifyConditionId },
         data: {
-          status: isFulfilled ? 'FULFILLED' : condition.status,
           balance: { increment: amount },
           trackingData: {
             type: 'DEPOSIT',
-            status: isFulfilled ? 'COMPLETED' : 'IN_PROGRESS',
+            status: this.getTrackingStatus(condition.trackingData),
             qualifyingDepositId: newDeposit.id,
             depositAmount: newDeposit.amount,
             depositCode: newDeposit.code || undefined,
@@ -199,36 +381,44 @@ export class DepositService implements IDepositService {
       });
 
       // 4b. Update parent Rewards, Phase, and Promotion balances
-      const phaseId = condition.phase.id;
-      const promotionId = condition.phase.promotionId;
-      
+      const phaseIds = new Set(condition.rewards.map(reward => reward.phaseId));
+      const promotionIds = new Set(condition.rewards.map(reward => reward.promotionId));
+
       for (const reward of condition.rewards) {
         await tx.reward.update({
           where: { id: reward.id },
           data: { totalBalance: { increment: amount } },
         });
       }
-      await tx.phase.update({
-        where: { id: phaseId },
-        data: { totalBalance: { increment: amount } },
-      });
-      await tx.promotion.update({
-        where: { id: promotionId },
-        data: { totalBalance: { increment: amount } },
-      });
+      for (const phaseId of phaseIds) {
+        await tx.phase.update({
+          where: { id: phaseId },
+          data: { totalBalance: { increment: amount } },
+        });
+      }
+      for (const promotionId of promotionIds) {
+        await tx.promotion.update({
+          where: { id: promotionId },
+          data: { totalBalance: { increment: amount } },
+        });
+      }
       
-      // 5. If fulfilled, calculate and update the Reward's value itself
-      // contributesToRewardValue now only exists inside conditions as discriminator
-      if (isFulfilled && conditionData.conditions.contributesToRewardValue) {
+      // 5. Recalculate reward value automatically when configured by condition,
+      // while keeping statuses fully manual.
+      if (canRecalculateRewardValue && conditionData.conditions.contributesToRewardValue) {
         const rewardToUpdate = condition.rewards.find(r => r.valueType === 'CALCULATED_FROM_CONDITIONS');
         if (rewardToUpdate) {
-          // Type narrowing confirmed - now we can access CALCULATED VALUE fields
           const effectiveAmount = Math.min(
             data.amount,
             conditionData.conditions.maxAmount || Infinity
           );
-          let calculatedValue = (effectiveAmount * conditionData.conditions.bonusPercentage) / 100;
-          calculatedValue = Math.min(calculatedValue, conditionData.conditions.maxBonusAmount);
+          const bonusPercentage = conditionData.conditions.bonusPercentage;
+          const maxBonusAmount = conditionData.conditions.maxBonusAmount;
+          if (bonusPercentage === undefined || maxBonusAmount === undefined) {
+            throw new BadRequestError('Deposit condition bonus fields are required.');
+          }
+          let calculatedValue = (effectiveAmount * bonusPercentage) / 100;
+          calculatedValue = Math.min(calculatedValue, maxBonusAmount);
 
           await tx.reward.update({
             where: { id: rewardToUpdate.id },
@@ -245,25 +435,88 @@ export class DepositService implements IDepositService {
    * Updates an existing deposit
    */
   async update(id: string, data: Partial<Deposit>): Promise<DepositEntity> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new AppError('Deposit not found', 404);
-
     const validatedData = DepositSchema.partial().parse(data);
-    const prismaData = toDepositUpdateInput(validatedData);
-    
-    // Note: Complex side-effects on update (e.g., balance changes) are not yet implemented.
-    const updatedDeposit = await this.repository.update(id, prismaData);
-    return toDepositEntity(updatedDeposit);
+
+    if (validatedData.qualifyConditionId !== undefined) {
+      throw new BadRequestError('Changing qualifyConditionId on update is not supported.');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const existing = await this.repository.findById(id, tx);
+      if (!existing) {
+        throw new AppError('Deposit not found', 404);
+      }
+
+      const nextBookmaker = validatedData.bookmaker ?? existing.bookmaker;
+      const nextAmount = validatedData.amount ?? existing.amount;
+      const nextDate = validatedData.date ?? existing.date;
+      const nextCode =
+        validatedData.code !== undefined ? validatedData.code : existing.code ?? undefined;
+
+      if (existing.bookmaker === nextBookmaker) {
+        const amountDelta = nextAmount - existing.amount;
+        await this.updateBookmakerBalance(tx, existing.userId, existing.bookmaker, amountDelta);
+      } else {
+        await this.updateBookmakerBalance(tx, existing.userId, existing.bookmaker, -existing.amount);
+        await this.updateBookmakerBalance(tx, existing.userId, nextBookmaker, nextAmount);
+      }
+
+      const updatedDeposit = await this.repository.update(
+        id,
+        {
+          bookmaker: nextBookmaker,
+          amount: nextAmount,
+          date: nextDate,
+          code: nextCode,
+        },
+        tx
+      );
+
+      if (existing.qualifyConditionId) {
+        const amountDelta = nextAmount - existing.amount;
+        await this.applyContextBalanceDelta(tx, existing.qualifyConditionId, amountDelta);
+        await this.updateConditionTrackingAndRewardValue(tx, existing.qualifyConditionId, {
+          depositId: updatedDeposit.id,
+          amount: updatedDeposit.amount,
+          date: updatedDeposit.date,
+          code: updatedDeposit.code ?? undefined,
+        });
+      }
+
+      return toDepositEntity(updatedDeposit);
+    });
   }
 
   /**
    * Deletes a deposit
    */
-  async delete(id: string): Promise<void> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new AppError('Deposit not found', 404);
-    
-    // Note: Complex side-effects on delete (e.g., reverting balances) are not yet implemented.
-    await this.repository.delete(id);
+  async delete(id: string): Promise<DeleteDepositResult> {
+    return prisma.$transaction(async (tx) => {
+      const existing = await this.repository.findById(id, tx);
+      if (!existing) {
+        throw new AppError('Deposit not found', 404);
+      }
+
+      const promotionContext = existing.promotionContext
+        ? PromotionContextSchema.safeParse(existing.promotionContext)
+        : null;
+      const promotionId = promotionContext?.success
+        ? promotionContext.data.promotionId
+        : undefined;
+
+      await this.updateBookmakerBalance(tx, existing.userId, existing.bookmaker, -existing.amount);
+
+      if (existing.qualifyConditionId) {
+        await this.applyContextBalanceDelta(tx, existing.qualifyConditionId, -existing.amount);
+        await this.updateConditionTrackingAndRewardValue(tx, existing.qualifyConditionId, null);
+      }
+
+      await this.repository.delete(id, tx);
+
+      return DeleteDepositResultSchema.parse({
+        success: true,
+        promotionId,
+      });
+    });
   }
 }

@@ -15,4 +15,11 @@ export type { AppRouter } from './root';
 export { publicProcedure, router, middleware, loggerMiddleware } from './trpc';
 
 // Re-exportar tipos de contexto
-export type { Context, IBookmakerAccountService, IPromotionService, IDepositService, IRewardService } from './context';
+export type {
+  Context,
+  IBookmakerAccountService,
+  IPromotionService,
+  IDepositService,
+  IRewardService,
+  IQualifyConditionService,
+} from './context';

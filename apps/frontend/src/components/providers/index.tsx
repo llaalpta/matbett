@@ -1,5 +1,6 @@
 "use client";
 
+import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { AppTRPCProvider } from "@/providers/trpc-provider";
 
 interface ProvidersProps {
@@ -7,5 +8,9 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
-  return <AppTRPCProvider>{children}</AppTRPCProvider>;
+  return (
+    <AppTRPCProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </AppTRPCProvider>
+  );
 }

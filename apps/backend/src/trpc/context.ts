@@ -10,6 +10,7 @@ import { DepositService } from '@/services/deposit.service';
 import { PromotionService } from '@/services/promotion.service';
 import { BookmakerAccountService } from '@/services/bookmaker-account.service';
 import { RewardService } from '@/services/reward.service'; // Importar el nuevo servicio
+import { QualifyConditionService } from '@/services/qualify-condition.service';
 
 /**
  * Creates context for tRPC requests.
@@ -27,6 +28,7 @@ export function createContext() {
     promotionService: new PromotionService(),
     bookmakerAccountService: new BookmakerAccountService(),
     rewardService: new RewardService(), // Inyectar el servicio de recompensa
+    qualifyConditionService: new QualifyConditionService(),
   };
 }
 

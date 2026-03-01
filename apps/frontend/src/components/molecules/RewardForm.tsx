@@ -1,410 +1,342 @@
 "use client";
 
-import {
-  activationMethodOptions,
-  rewardTypeOptions,
-  rewardValueTypeOptions,
-  rewardStatusOptions,
-  claimMethodOptions,
-  qualifyConditionTypeOptions,
-  getLabel,
-  type AvailableTimeframes,
-} from "@matbett/shared";
-import { Trash2, Plus, Search } from "lucide-react";
-import {
-  useFieldArray,
-  FieldArrayPath,
-  useWatch,
-  FieldValues,
-  Path,
-  FieldArray,
-  useFormContext,
-} from "react-hook-form";
+import { QualifyConditionSchema } from "@matbett/shared";
+import { useCallback, useMemo, useState } from "react";
+import { Path, useFormContext, useWatch } from "react-hook-form";
 
+import { useRemovedAnchorRefs } from "@/hooks/domain/useRemovedAnchorRefs";
 import {
-  CheckboxField,
-  InputField,
-  SelectField,
-  TextareaField,
-  TypographyLarge,
-} from "@/components/atoms";
-import { DateTimeField } from "@/components/atoms/DateTimeField";
+  usePromotionRewardLogic,
+  useStandaloneRewardLogic,
+} from "@/hooks/domain/useRewardLogic";
+import { usePromotionRewardStatusDateSync } from "@/hooks/useStatusDateSync";
+import { useStandaloneRewardStatusDateSync } from "@/hooks/useStatusDateSync";
+import type {
+  PromotionFormData,
+  RewardFormData,
+} from "@/types/hooks";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useRewardLogic } from "@/hooks/domain/useRewardLogic";
-import { buildDefaultQualifyCondition } from "@/utils/formDefaults";
+  buildRewardDraftAnchorCatalog,
+  mergeAnchorCatalogs,
+} from "@/utils/anchorCatalog";
+
+import { DepositQualifyModal } from "./DepositQualifyModal";
 import {
-  getUsageTypeBadgeVariant,
-  getUsageTypeLabel,
-} from "@/utils/usageTypeUtils";
-import { useStatusDateSync } from "@/hooks/useStatusDateSync";
+  buildPromotionRewardPaths,
+  buildRewardStandalonePaths,
+  type PromotionRewardPath,
+} from "./reward.paths";
+import {
+  RewardFormBase,
+  type RewardFormSharedProps,
+} from "./RewardFormBase";
 
-import { QualifyConditionForm } from "./QualifyConditionForm";
-import { UsageConditionsForm } from "./UsageConditionsForm";
-import { UsageTrackingForm } from "./UsageTrackingForm";
+const getConditionId = (value: unknown): string | undefined => {
+  if (typeof value !== "object" || value === null || !("id" in value)) {
+    return undefined;
+  }
+  const id = value.id;
+  return typeof id === "string" ? id : undefined;
+};
 
-import type { RewardServerModel, PromotionFormData } from "@/types/hooks";
-
-interface RewardFormProps<T extends FieldValues> {
-  fieldPath: Path<T> | "";
-  onRemove: () => void;
-  canRemove?: boolean;
-  isEditing?: boolean;
-  onQualifyConditionSelect?: (id: string, index: number) => void;
-  rewardServerData?: RewardServerModel; // Optional server data for tracking display
-  availableTimeframes?: AvailableTimeframes; // Available timeframes from parent
-}
-
-export function RewardForm<T extends FieldValues>({
+export function RewardForm({
   fieldPath,
   onRemove,
-  canRemove = false,
-  isEditing = false,
+  canRemove,
+  removeDisabledReason,
+  isEditing,
   onQualifyConditionSelect,
   rewardServerData,
-  availableTimeframes,
-}: RewardFormProps<T>) {
-  // 1. Usar lógica de dominio desacoplada (obtiene contexto internamente)
-  const {
+  anchorCatalog,
+  anchorOccurrences,
+  availableQualifyConditions,
+}: RewardFormSharedProps & { fieldPath: PromotionRewardPath }) {
+  const { control, setValue } = useFormContext<PromotionFormData>();
+  const p = (value: Path<PromotionFormData>) => value;
+
+  const { paths, qualifyConditionsPath: _qualifyConditionsPath, usagePaths, getQualifyConditionPaths } =
+    buildPromotionRewardPaths(fieldPath, p);
+
+  const selectableQualifyConditions = availableQualifyConditions?.filter(
+    (condition): condition is typeof condition & { id: string } =>
+      typeof condition?.id === "string" && condition.id.length > 0
+  );
+
+  const usageTypeRaw = useWatch({
     control,
-    handleTypeChange,
-    handleValueTypeChange,
-    hasContributingCondition,
+    name: paths.usageConditionsType,
+  });
+
+  const usageType = typeof usageTypeRaw === "string" ? usageTypeRaw : undefined;
+
+  const {
     rewardType,
     valueType,
-    getPath, // Helper para construir paths agnósticos
-  } = useRewardLogic(fieldPath);
+    qualifyConditions,
+    qualifyConditionsValues,
+    handleTypeChange,
+    handleValueTypeChange,
+    rewardHasContributingCondition,
+    addQualifyCondition,
+    handleQualifyConditionTypeChange,
+    appendQualifyCondition,
+    removeQualifyCondition,
+    getQualifyConditionRemoveDisabledReason,
+    canRemoveQualifyCondition,
+  } = usePromotionRewardLogic(paths, rewardServerData);
 
-  // Obtener setValue del contexto (useFormContext debe usarse si T es genérico, asumiendo que el componente está dentro de un FormProvider)
-  const { setValue } = useFormContext();
+  const handleAddExistingQualifyCondition = useCallback(
+    (conditionId: string) => {
+      const condition = availableQualifyConditions?.find(
+        (item) => item.id === conditionId
+      );
+      if (!condition) {
+        return;
+      }
+      const parsedCondition = QualifyConditionSchema.parse(condition);
+      appendQualifyCondition(parsedCondition);
+    },
+    [appendQualifyCondition, availableQualifyConditions]
+  );
 
-  // Sincronizar fechas de estado para el reward
-  // Nota: Casting necesario porque useStatusDateSync espera tipos específicos de PromotionFormData si T no coincide,
-  // pero aquí lo hacemos genérico. Asumiremos que el path es válido.
-  useStatusDateSync({
-    control: control as any,
-    setValue: setValue as any,
-    statusPath: getPath("status") as any,
-    datePath: getPath("statusDate") as any, // Asumiendo que RewardSchema tendrá statusDate eventualmente, o lo añadimos dinámicamente
-    serverDates: rewardServerData,
-  });
-
-  // 2. Construir el path para qualifyConditions
-  const qualifyConditionsPath = getPath(
-    "qualifyConditions"
-  ) as FieldArrayPath<T>;
-
-  const {
-    fields: qualifyConditions,
-    append: appendCondition,
-    remove: removeCondition,
-  } = useFieldArray({
+  usePromotionRewardStatusDateSync({
     control,
-    name: qualifyConditionsPath,
+    setValue,
+    statusPath: paths.status,
+    datePath: paths.statusDate,
+    serverDates: rewardServerData
+      ? {
+          qualifyConditionsFulfilledAt:
+            rewardServerData.qualifyConditionsFulfilledAt ?? null,
+          claimedAt: rewardServerData.claimedAt ?? null,
+          receivedAt: rewardServerData.receivedAt ?? null,
+          useStartedAt: rewardServerData.useStartedAt ?? null,
+          useCompletedAt: rewardServerData.useCompletedAt ?? null,
+          expiredAt: rewardServerData.expiredAt ?? null,
+        }
+      : undefined,
   });
-
-  // Watch entire qualifyConditions array to get types for tabs labels
-  const qualifyConditionsValues = useWatch({
-    control,
-    name: qualifyConditionsPath as Path<T>,
-  });
-
-  const addQualifyCondition = () => {
-    // Always start with DEPOSIT type by default
-    // User can change type later via QualifyConditionForm's selector
-    // which calls handleConditionTypeChange -> buildDefaultQualifyCondition(newType)
-    const newCondition = buildDefaultQualifyCondition("DEPOSIT");
-    // Type assertion to FieldArray element type
-    appendCondition(
-      newCondition as FieldArray<T, typeof qualifyConditionsPath>
-    );
-  };
-
-  // Watch usageType para el resumen del accordion
-  const usageType = useWatch({
-    control,
-    name: getPath("usageConditions.type") as Path<T>,
-  });
-
-  // Handler para cambio de tab de qualify condition
-  const handleQualifyConditionTabChange = (value: string) => {
-    const conditionIndex = parseInt(value);
-    const condition = qualifyConditions[conditionIndex];
-    if (condition?.id && onQualifyConditionSelect) {
-      onQualifyConditionSelect(condition.id, conditionIndex);
-    }
-  };
-
-  // Helper to create tracking callback for specific condition
-  const createTrackingCallback = (conditionIndex: number) => () => {
-    const condition = qualifyConditions[conditionIndex];
-    if (condition?.id && onQualifyConditionSelect) {
-      onQualifyConditionSelect(condition.id, conditionIndex);
-    }
-  };
 
   return (
-    <div className="border-border/50 bg-card w-full space-y-4 rounded-lg border p-5 shadow-sm">
-      {canRemove && (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            className="text-destructive hover:text-destructive/90"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Eliminar
-          </Button>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {/* Configuración básica del reward */}
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <SelectField<T>
-              name={getPath("type") as Path<T>}
-              label="Tipo de Recompensa"
-              options={rewardTypeOptions}
-              onValueChange={(value) => handleTypeChange(value)}
-              required
-            />
-
-            <SelectField<T>
-              name={getPath("valueType") as Path<T>}
-              label="Tipo de Valor"
-              options={rewardValueTypeOptions}
-              onValueChange={(value) => handleValueTypeChange(value)}
-              required
-            />
-
-            {/* Campo de valor siempre visible */}
-            <InputField<T>
-              name={getPath("value") as Path<T>}
-              label={
-                valueType === "FIXED" ? "Valor Fijo (€)" : "Valor Calculado (€)"
-              }
-              type="number"
-              min={0}
-              step={0.01}
-              placeholder={
-                valueType === "FIXED"
-                  ? "ej: 20"
-                  : "Se calculará automáticamente"
-              }
-              disabled={valueType === "CALCULATED_FROM_CONDITIONS"}
-              required
-            />
-
-            <SelectField<T>
-              name={getPath("activationMethod") as Path<T>}
-              label="Método de activación"
-              options={activationMethodOptions}
-              required
-            />
-
-            <SelectField<T>
-              name={getPath("claimMethod") as Path<T>}
-              label="Método de reclamación"
-              options={claimMethodOptions}
-              required
-            />
-
-            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-              <SelectField<T>
-                name={getPath("status") as Path<T>}
-                label="Estado"
-                options={rewardStatusOptions}
-                tooltip="Estado actual de la recompensa en su ciclo de vida"
-              />
-              <DateTimeField<T>
-                name={getPath("statusDate") as any} // Cast necesario si el schema base de Reward no tiene statusDate explicito en types, pero funcionará en runtime
-                label="Fecha del estado"
-                tooltip="Fecha en la que la recompensa cambió a este estado"
-              />
-            </div>
-          </div>
-
-          {/* Campo de restricciones de reclamación a ancho completo */}
-          <div className="w-full">
-            <TextareaField<T>
-              name={getPath("claimRestrictions") as Path<T>}
-              label="Restricciones de reclamación"
-              placeholder="Ej: Solo usuarios nuevos, no combinar con otras ofertas, etc."
-              rows={2}
-            />
-          </div>
-
-          {/* SNR solo para FREEBET - propiedad de la reward, no de usageConditions */}
-          {rewardType === "FREEBET" && (
-            <CheckboxField<T>
-              name={getPath("stakeNotReturned") as Path<T>}
-              label="Stake No Devuelto (SNR)"
-              tooltip="Al ganar con esta freebet, solo se recibe la ganancia neta, no el importe de la freebet"
-            />
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Accordion para secciones colapsables */}
-        <Accordion type="multiple" defaultValue={[]} className="space-y-4">
-          {/* Condiciones de calificación */}
-          <AccordionItem
-            value="qualify"
-            className="border-border bg-background rounded-md border border-b! border-l-4! border-l-orange-400!"
-          >
-            <AccordionTrigger className="px-6 py-4 hover:no-underline">
-              <div className="flex flex-1 flex-col items-start gap-1">
-                <TypographyLarge>Condiciones de Calificación</TypographyLarge>
-                <span className="text-muted-foreground text-sm font-normal">
-                  {qualifyConditions.length === 0 &&
-                    "Sin condiciones — recompensa automática"}
-                  {qualifyConditions.length === 1 &&
-                    `${qualifyConditions.length} condición configurada`}
-                  {qualifyConditions.length > 1 &&
-                    `${qualifyConditions.length} condiciones configuradas`}
-                </span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 pb-4">
-              <div
-                className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end ${qualifyConditions.length > 0 ? "border-border mb-4 border-b pb-4" : ""}`}
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addQualifyCondition}
-                  className="w-full sm:w-auto"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Añadir Condición
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    // TODO: Implementar selector de condiciones existentes
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  <Search className="mr-2 h-4 w-4" />
-                  Seleccionar Existente
-                </Button>
-              </div>
-              {qualifyConditions.length ===
-              0 ? null : qualifyConditions.length === 1 ? (
-                <QualifyConditionForm<T>
-                  fieldPath={`${qualifyConditionsPath}.0` as Path<T>}
-                  rewardType={rewardType as string}
-                  onRemove={() => removeCondition(0)}
-                  canRemove={true}
-                  rewardValueType={valueType as string}
-                  rewardHasContributingCondition={hasContributingCondition()}
-                  isEditing={isEditing}
-                  onViewTracking={createTrackingCallback(0)}
-                  availableTimeframes={availableTimeframes}
-                />
-              ) : (
-                <Tabs
-                  defaultValue="0"
-                  onValueChange={handleQualifyConditionTabChange}
-                >
-                  <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
-                    {qualifyConditions.map((_, conditionIndex) => {
-                      // Get type from watched values or default to DEPOSIT if not yet available
-                      const conditionType =
-                        (qualifyConditionsValues?.[conditionIndex] as any)
-                          ?.type || "DEPOSIT";
-                      const label = getLabel(
-                        qualifyConditionTypeOptions,
-                        conditionType
-                      );
-
-                      return (
-                        <TabsTrigger
-                          key={conditionIndex}
-                          value={conditionIndex.toString()}
-                        >
-                          {label} ({conditionIndex + 1})
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-
-                  {qualifyConditions.map((field, conditionIndex) => (
-                    <TabsContent
-                      key={field.id}
-                      value={conditionIndex.toString()}
-                    >
-                      <QualifyConditionForm<T>
-                        fieldPath={
-                          `${qualifyConditionsPath}.${conditionIndex}` as Path<T>
-                        }
-                        rewardType={rewardType as string}
-                        onRemove={() => removeCondition(conditionIndex)}
-                        canRemove={true}
-                        rewardValueType={valueType as string}
-                        rewardHasContributingCondition={hasContributingCondition()}
-                        isEditing={isEditing}
-                        onViewTracking={createTrackingCallback(conditionIndex)}
-                        availableTimeframes={availableTimeframes}
-                      />
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* Condiciones de uso específicas por tipo */}
-          <AccordionItem
-            value="usage"
-            className="border-border bg-background rounded-md border border-b! border-l-4! border-l-blue-400!"
-          >
-            <AccordionTrigger className="px-6 py-4 hover:no-underline">
-              <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <TypographyLarge>Condiciones de Uso</TypographyLarge>
-                  {usageType && (
-                    <Badge
-                      variant={getUsageTypeBadgeVariant(usageType as string)}
-                    >
-                      {getUsageTypeLabel(usageType as string)}
-                    </Badge>
-                  )}
-                </div>
-                <span className="text-muted-foreground text-sm font-normal">
-                  Configuración de uso de la recompensa
-                </span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-6 pb-4">
-              <UsageConditionsForm<T>
-                fieldPath={getPath("usageConditions") as Path<T>}
-                availableTimeframes={availableTimeframes}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-
-        {/* Seguimiento de uso específico por tipo - solo en edición */}
-        {isEditing && rewardServerData && (
-          <UsageTrackingForm rewardServerData={rewardServerData} />
-        )}
-      </div>
-    </div>
+    <RewardFormBase<
+      PromotionFormData,
+      typeof _qualifyConditionsPath,
+      typeof paths
+    >
+      paths={paths}
+      getQualifyConditionPaths={getQualifyConditionPaths}
+      usagePaths={usagePaths}
+      rewardType={typeof rewardType === "string" ? rewardType : undefined}
+      valueType={typeof valueType === "string" ? valueType : undefined}
+      usageType={usageType}
+      qualifyConditions={qualifyConditions}
+      qualifyConditionsValues={qualifyConditionsValues}
+      onTypeChange={handleTypeChange}
+      onValueTypeChange={handleValueTypeChange}
+      onAddQualifyCondition={addQualifyCondition}
+      onRemoveQualifyCondition={removeQualifyCondition}
+      onQualifyConditionTypeChange={handleQualifyConditionTypeChange}
+      getQualifyConditionRemoveDisabledReason={getQualifyConditionRemoveDisabledReason}
+      canRemoveQualifyCondition={canRemoveQualifyCondition}
+      rewardHasContributingCondition={rewardHasContributingCondition}
+      onRemove={onRemove}
+      canRemove={canRemove}
+      removeDisabledReason={removeDisabledReason}
+      isEditing={isEditing}
+      onQualifyConditionSelect={onQualifyConditionSelect}
+      availableQualifyConditions={selectableQualifyConditions}
+      onAddExistingQualifyCondition={handleAddExistingQualifyCondition}
+      rewardServerData={rewardServerData}
+      anchorCatalog={anchorCatalog}
+      anchorOccurrences={anchorOccurrences}
+    />
   );
 }
+
+export function StandaloneRewardFormFields({
+  isEditing,
+  rewardServerData,
+  anchorCatalog,
+  anchorOccurrences,
+  availableQualifyConditions,
+  onQualifyConditionSelect,
+}: Omit<RewardFormSharedProps, "onRemove" | "canRemove">) {
+  const { control, setValue } = useFormContext<RewardFormData>();
+  const p = (value: Path<RewardFormData>) => value;
+  const { paths, qualifyConditionsPath: _qualifyConditionsPath, usagePaths, getQualifyConditionPaths } =
+    buildRewardStandalonePaths(p);
+
+  const [selectedConditionIndex, setSelectedConditionIndex] = useState<number>();
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const { removedAnchorRefs, markRemoved, unmarkRemoved } = useRemovedAnchorRefs();
+
+  const closeDepositModal = useCallback(() => {
+    setIsDepositModalOpen(false);
+  }, []);
+
+  const currentReward = useWatch({
+    control,
+  });
+
+  const draftAnchorCatalog = useMemo(
+    () =>
+      buildRewardDraftAnchorCatalog(
+        currentReward,
+        `Reward - ${currentReward?.type ?? "UNKNOWN"}`
+      ),
+    [currentReward]
+  );
+
+  const effectiveAnchorCatalog = useMemo(
+    () =>
+      mergeAnchorCatalogs({
+        serverCatalog: anchorCatalog,
+        draftCatalog: draftAnchorCatalog,
+        removedRefs: removedAnchorRefs,
+      }),
+    [anchorCatalog, draftAnchorCatalog, removedAnchorRefs]
+  );
+
+  const usageTypeRaw = useWatch({
+    control,
+    name: paths.usageConditionsType,
+  });
+
+  const usageType = typeof usageTypeRaw === "string" ? usageTypeRaw : undefined;
+
+  const {
+    rewardType,
+    valueType,
+    qualifyConditions,
+    qualifyConditionsValues,
+    handleTypeChange,
+    handleValueTypeChange,
+    rewardHasContributingCondition,
+    addQualifyCondition,
+    handleQualifyConditionTypeChange,
+    appendQualifyCondition,
+    removeQualifyCondition,
+    getQualifyConditionRemoveDisabledReason,
+    canRemoveQualifyCondition,
+  } = useStandaloneRewardLogic(paths, rewardServerData);
+
+  const handleQualifyConditionSelect = useCallback(
+    (_: string, index: number) => {
+      const persistedConditionId = getConditionId(
+        qualifyConditionsValues?.[index]
+      );
+      if (persistedConditionId && onQualifyConditionSelect) {
+        onQualifyConditionSelect(persistedConditionId, index);
+        return;
+      }
+      setSelectedConditionIndex(index);
+      setIsDepositModalOpen(true);
+    },
+    [onQualifyConditionSelect, qualifyConditionsValues]
+  );
+
+  const handleAddExistingQualifyCondition = useCallback(
+    (conditionId: string) => {
+      const condition = availableQualifyConditions?.find(
+        (item) => item.id === conditionId
+      );
+      if (!condition) {
+        return;
+      }
+      const parsedCondition = QualifyConditionSchema.parse(condition);
+      appendQualifyCondition(parsedCondition);
+      unmarkRemoved("QUALIFY_CONDITION", conditionId);
+    },
+    [appendQualifyCondition, availableQualifyConditions, unmarkRemoved]
+  );
+
+  const handleRemoveQualifyCondition = useCallback(
+    (index: number) => {
+      const persistedConditionId = getConditionId(
+        qualifyConditionsValues?.[index]
+      );
+      if (typeof persistedConditionId === "string") {
+        markRemoved("QUALIFY_CONDITION", persistedConditionId);
+      }
+      removeQualifyCondition(index);
+    },
+    [markRemoved, qualifyConditionsValues, removeQualifyCondition]
+  );
+
+  useStandaloneRewardStatusDateSync({
+    control,
+    setValue,
+    statusPath: paths.status,
+    datePath: paths.statusDate,
+    serverDates: rewardServerData
+      ? {
+          qualifyConditionsFulfilledAt:
+            rewardServerData.qualifyConditionsFulfilledAt ?? null,
+          claimedAt: rewardServerData.claimedAt ?? null,
+          receivedAt: rewardServerData.receivedAt ?? null,
+          useStartedAt: rewardServerData.useStartedAt ?? null,
+          useCompletedAt: rewardServerData.useCompletedAt ?? null,
+          expiredAt: rewardServerData.expiredAt ?? null,
+        }
+      : undefined,
+  });
+
+  const conditionPath =
+    selectedConditionIndex !== undefined
+      ? (`qualifyConditions.${selectedConditionIndex}` satisfies Path<RewardFormData>)
+      : undefined;
+
+  const conditionServerData =
+    selectedConditionIndex !== undefined
+      ? rewardServerData?.qualifyConditions?.[selectedConditionIndex]
+      : undefined;
+
+  return (
+    <>
+      <RewardFormBase<
+        RewardFormData,
+        typeof _qualifyConditionsPath,
+        typeof paths
+      >
+        paths={paths}
+        getQualifyConditionPaths={getQualifyConditionPaths}
+        usagePaths={usagePaths}
+        rewardType={typeof rewardType === "string" ? rewardType : undefined}
+        valueType={typeof valueType === "string" ? valueType : undefined}
+        usageType={usageType}
+        qualifyConditions={qualifyConditions}
+        qualifyConditionsValues={qualifyConditionsValues}
+        onTypeChange={handleTypeChange}
+        onValueTypeChange={handleValueTypeChange}
+        onAddQualifyCondition={addQualifyCondition}
+        onRemoveQualifyCondition={handleRemoveQualifyCondition}
+        onQualifyConditionTypeChange={handleQualifyConditionTypeChange}
+        getQualifyConditionRemoveDisabledReason={getQualifyConditionRemoveDisabledReason}
+        canRemoveQualifyCondition={canRemoveQualifyCondition}
+        rewardHasContributingCondition={rewardHasContributingCondition}
+        onRemove={() => {}}
+        canRemove={false}
+        removeDisabledReason={undefined}
+        isEditing={isEditing}
+        onQualifyConditionSelect={handleQualifyConditionSelect}
+        enableQualifyConditionDirectOpen
+        availableQualifyConditions={availableQualifyConditions}
+        onAddExistingQualifyCondition={handleAddExistingQualifyCondition}
+        rewardServerData={rewardServerData}
+        anchorCatalog={effectiveAnchorCatalog}
+        anchorOccurrences={anchorOccurrences}
+      />
+
+      {conditionPath && conditionServerData?.type === "DEPOSIT" && (
+        <DepositQualifyModal
+          isOpen={isDepositModalOpen}
+          onClose={closeDepositModal}
+          conditionPath={conditionPath}
+          conditionServerData={conditionServerData}
+        />
+      )}
+    </>
+  );
+}
+
+

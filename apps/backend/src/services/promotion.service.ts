@@ -4,7 +4,9 @@ import {
   type PromotionEntity,
   type PromotionListInput,
   type PaginatedResponse,
-  type AvailableTimeframes,
+  type AnchorCatalog,
+  type AnchorOccurrences,
+  type QualifyConditionEntity,
   PromotionStatusSchema,
   BookmakerSchema,
 } from '@matbett/shared';
@@ -15,14 +17,11 @@ import {
   toPromotionCreateInput,
   toPromotionUpdateInput,
   toPromotionEntity,
-  generateAvailableTimeframes,
+  generateAnchorCatalog,
+  generateAnchorOccurrences,
+  toPromotionQualifyConditionEntity,
 } from '@/lib/transformers/promotion.transformer';
-import {
-  getAllAnchorEntries,
-  findTimeframesReferencingAnchor,
-  updateResolvedDates,
-} from '@/lib/transformers/timeframe-resolver.transformer';
-import { AppError } from '@/utils/errors';
+import { AppError, BadRequestError } from '@/utils/errors';
 import { prisma } from '@/lib/prisma';
 import type { PromotionWithRelations } from '@/repositories/promotion.repository';
 import { PromotionRepository } from '@/repositories/promotion.repository';
@@ -67,7 +66,7 @@ export class PromotionService implements IPromotionService {
    * @param data - The partial data to update.
    * @returns The updated promotion entity.
    */
-  async update(id: string, data: Partial<Promotion>): Promise<PromotionEntity> {
+  async update(id: string, data: Promotion): Promise<PromotionEntity> {
     // 1. Verification
     const existing = await this.repository.findById(id);
     if (!existing) {
@@ -75,16 +74,93 @@ export class PromotionService implements IPromotionService {
     }
 
     // 2. Partial Validation
-    const validated = PromotionSchema.partial().parse(data);
+    const validated = PromotionSchema.parse(data);
+    this.assertNoBlockedHierarchyRemovals(existing, validated);
 
     // 3. Transformation (Calculates diffs for create, update, delete)
-    const updateInput = toPromotionUpdateInput(validated);
+    const updateInput = toPromotionUpdateInput(validated, existing.id);
 
     // 4. Persistence
     const updated = await this.repository.update(id, updateInput);
 
     // 5. Return transformed entity
     return toPromotionEntity(updated);
+  }
+
+  private assertNoBlockedHierarchyRemovals(
+    existing: PromotionWithRelations,
+    incoming: Promotion
+  ): void {
+    const incomingPhaseIds = new Set(
+      incoming.phases.map((phase) => phase.id).filter(Boolean)
+    );
+
+    const removedPhases = existing.phases.filter(
+      (phase) => !incomingPhaseIds.has(phase.id)
+    );
+
+    for (const phase of removedPhases) {
+      if (phase.rewards.length > 0) {
+        throw new BadRequestError(
+          `Cannot remove phase "${phase.name}" because it still has rewards. Remove child rewards first.`
+        );
+      }
+    }
+
+    for (const existingPhase of existing.phases) {
+      const incomingPhase = incoming.phases.find(
+        (phase) => phase.id === existingPhase.id
+      );
+      if (!incomingPhase) {
+        continue;
+      }
+
+      const incomingRewardIds = new Set(
+        incomingPhase.rewards.map((reward) => reward.id).filter(Boolean)
+      );
+      const removedRewards = existingPhase.rewards.filter(
+        (reward) => !incomingRewardIds.has(reward.id)
+      );
+
+      for (const reward of removedRewards) {
+        if (reward.qualifyConditions.length > 0) {
+          throw new BadRequestError(
+            `Cannot remove reward "${reward.id}" because it still has qualify conditions. Remove child qualify conditions first.`
+          );
+        }
+      }
+    }
+
+    const incomingConditionIds = new Set<string>();
+    for (const condition of incoming.availableQualifyConditions) {
+      if (condition.id) {
+        incomingConditionIds.add(condition.id);
+      }
+    }
+    for (const phase of incoming.phases) {
+      for (const reward of phase.rewards) {
+        for (const condition of reward.qualifyConditions) {
+          if (condition.id) {
+            incomingConditionIds.add(condition.id);
+          }
+        }
+      }
+    }
+
+    const removedConditions = existing.availableQualifyConditions.filter(
+      (condition) => !incomingConditionIds.has(condition.id)
+    );
+
+    for (const condition of removedConditions) {
+      const hasUsage = (condition._count.rewards ?? 0) > 0;
+      const hasTracking = (condition._count.deposits ?? 0) > 0 || (condition._count.bets ?? 0) > 0;
+
+      if (hasUsage || hasTracking) {
+        throw new BadRequestError(
+          `Cannot remove qualify condition "${condition.id}" because it still has dependencies.`
+        );
+      }
+    }
   }
 
   /**
@@ -99,11 +175,11 @@ export class PromotionService implements IPromotionService {
     const where: Prisma.PromotionWhereInput = { userId };
     if (status) {
       const parsedStatus = PromotionStatusSchema.safeParse(status);
-      if (parsedStatus.success) where.status = parsedStatus.data;
+      if (parsedStatus.success) {where.status = parsedStatus.data;}
     }
     if (bookmaker) {
       const parsedBookmaker = BookmakerSchema.safeParse(bookmaker);
-      if (parsedBookmaker.success) where.bookmaker = parsedBookmaker.data;
+      if (parsedBookmaker.success) {where.bookmaker = parsedBookmaker.data;}
     }
 
     let orderBy: Prisma.PromotionOrderByWithRelationInput = { createdAt: 'desc' };
@@ -121,9 +197,9 @@ export class PromotionService implements IPromotionService {
       return Promise.all([promoPromise, totalPromise]);
     });
 
-    // No incluir availableTimeframes en el listado (optimización de rendimiento)
+    // No incluir metadata de anchors en el listado (optimizacion de rendimiento)
     const promotionEntities = promotions.map((p: PromotionWithRelations) =>
-      toPromotionEntity(p, { includeAvailableTimeframes: false })
+      toPromotionEntity(p)
     );
     const pageCount = Math.ceil(total / pageSize);
 
@@ -141,7 +217,7 @@ export class PromotionService implements IPromotionService {
    */
   async getById(id: string): Promise<PromotionEntity | null> {
     const promotion = await this.repository.findById(id);
-    if (!promotion) return null;
+    if (!promotion) {return null;}
     return toPromotionEntity(promotion);
   }
 
@@ -158,108 +234,34 @@ export class PromotionService implements IPromotionService {
     await this.repository.delete(id);
   }
 
-  /**
-   * Gets available timeframes for a promotion.
-   * Used to configure relative timeframes at any level of the hierarchy.
-   *
-   * @param promotionId - The ID of the promotion.
-   * @returns The available timeframes structure.
-   */
-  async getAvailableTimeframes(promotionId: string): Promise<AvailableTimeframes> {
+  async getAnchorCatalog(promotionId: string): Promise<AnchorCatalog> {
     const promotion = await this.repository.findById(promotionId);
     if (!promotion) {
       throw new AppError('Promotion not found', 404);
     }
-    return generateAvailableTimeframes(promotion);
+    return generateAnchorCatalog(promotion);
   }
 
-  /**
-   * Recalculates resolved dates (start/end) for all relative timeframes in a promotion.
-   * Should be called after status changes that set timestamps (e.g., activation, reward received).
-   *
-   * @param promotionId - The ID of the promotion to recalculate.
-   */
-  async recalculateTimeframes(promotionId: string): Promise<void> {
-    // 1. Fetch full promotion tree
+  async getAnchorOccurrences(promotionId: string): Promise<AnchorOccurrences> {
     const promotion = await this.repository.findById(promotionId);
     if (!promotion) {
       throw new AppError('Promotion not found', 404);
     }
+    return generateAnchorOccurrences(promotion);
+  }
 
-    // 2. Get all anchor entries (timestamps)
-    const anchorEntries = getAllAnchorEntries(promotion);
-
-    // 3. Track which entities need updating
-    const phaseUpdates = new Map<string, Prisma.InputJsonValue>();
-    const qualifyConditionUpdates = new Map<string, Prisma.InputJsonValue>();
-    const rewardUpdates = new Map<string, Prisma.InputJsonValue>();
-
-    // 4. For each anchor with a timestamp, find and update referencing timeframes
-    for (const entry of anchorEntries) {
-      const referencingTimeframes = findTimeframesReferencingAnchor(
-        promotion,
-        entry.anchorEntityType,
-        entry.anchorEntityId,
-        entry.anchorEvent
+  async getAvailableQualifyConditions(
+    promotionId: string
+  ): Promise<QualifyConditionEntity[]> {
+    const conditions =
+      await this.repository.findAvailableQualifyConditionsByPromotionId(
+        promotionId
       );
 
-      for (const ref of referencingTimeframes) {
-        const wasModified = updateResolvedDates(ref.timeframe, entry.timestamp);
-
-        if (wasModified) {
-          switch (ref.entityType) {
-            case 'phase': {
-              phaseUpdates.set(ref.entityId, ref.timeframe as unknown as Prisma.InputJsonValue);
-              break;
-            }
-            case 'qualifyCondition': {
-              qualifyConditionUpdates.set(ref.entityId, ref.timeframe as unknown as Prisma.InputJsonValue);
-              break;
-            }
-            case 'reward': {
-              // For rewards, we need to update the entire usageConditions object
-              const reward = promotion.phases
-                .flatMap(p => p.rewards)
-                .find(r => r.id === ref.entityId);
-              if (reward && reward.usageConditions) {
-                const uc = reward.usageConditions as Record<string, unknown>;
-                uc.timeframe = ref.timeframe;
-                rewardUpdates.set(ref.entityId, uc as Prisma.InputJsonValue);
-              }
-              break;
-            }
-          }
-        }
-      }
+    if (!conditions) {
+      throw new AppError('Promotion not found', 404);
     }
 
-    // 5. Persist updates in a transaction
-    if (phaseUpdates.size > 0 || qualifyConditionUpdates.size > 0 || rewardUpdates.size > 0) {
-      await prisma.$transaction(async (tx) => {
-        // Update phases
-        for (const [phaseId, timeframe] of phaseUpdates) {
-          await tx.phase.update({
-            where: { id: phaseId },
-            data: { timeframe },
-          });
-        }
-
-        // Update qualify conditions
-        for (const [qcId, timeframe] of qualifyConditionUpdates) {
-          await tx.rewardQualifyCondition.update({
-            where: { id: qcId },
-            data: { timeframe },
-          });
-        }
-
-        // Update rewards (usageConditions)
-        for (const [rewardId, usageConditions] of rewardUpdates) {
-          await tx.reward.update({
-            where: { id: rewardId },
-            data: { usageConditions },
-          });
-        }
-      });
-    }
+    return conditions.map((condition) => toPromotionQualifyConditionEntity(condition));
   }
 }

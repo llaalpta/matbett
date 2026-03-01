@@ -1,14 +1,13 @@
 "use client";
 
 import { qualifyTrackingStatusOptions } from "@matbett/shared";
-import { Control, FieldPath } from "react-hook-form";
+import { Control, FieldValues } from "react-hook-form";
 
 import { InputField, SelectField } from "@/components/atoms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { PromotionFormData } from "@/types/hooks";
 
 interface BetTrackingProps {
-  control: Control<PromotionFormData>;
+  control: Control<FieldValues>;
   basePath: string;
 }
 
@@ -24,15 +23,13 @@ export function BetTracking({ control, basePath }: BetTrackingProps) {
         <div className="grid grid-cols-2 gap-4">
           <SelectField
             control={control}
-            name={`${basePath}.tracking.status` as FieldPath<PromotionFormData>}
+            name={`${basePath}.tracking.status`}
             label="Estado del Seguimiento"
             options={qualifyTrackingStatusOptions}
           />
           <InputField
             control={control}
-            name={
-              `${basePath}.tracking.currentAttempts` as FieldPath<PromotionFormData>
-            }
+            name={`${basePath}.tracking.currentAttempts`}
             label="Intentos Actuales"
             type="number"
             placeholder="0"
@@ -42,9 +39,7 @@ export function BetTracking({ control, basePath }: BetTrackingProps) {
         <div className="space-y-2">
           <InputField
             control={control}
-            name={
-              `${basePath}.tracking.successfulBetId` as FieldPath<PromotionFormData>
-            }
+            name={`${basePath}.tracking.successfulBetId`}
             label="ID de Apuesta Exitosa"
             placeholder="bet_123456"
           />

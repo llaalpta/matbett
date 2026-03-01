@@ -1,10 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { CenteredErrorState } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,22 +13,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useTRPC } from "@/lib/trpc";
+import { usePromotions } from "@/hooks/api/usePromotions";
 
 function PromotionList() {
-  const trpc = useTRPC();
-  // Usar queryOptions generado por el proxy tRPC
-  const { data, isLoading } = useQuery(
-    trpc.promotion.list.queryOptions({
-      pageIndex: 0,
-      pageSize: 20,
-    })
-  );
-
+  const { data, isLoading, isError, error, refetch } = usePromotions({
+    pageIndex: 0,
+    pageSize: 20,
+  });
   const promotions = data?.data;
 
   if (isLoading) {
     return <div>Cargando promociones...</div>;
+  }
+
+  if (isError) {
+    return (
+      <CenteredErrorState
+        error={error}
+        fallbackMessage="No se pudieron cargar las promociones."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (!promotions || promotions.length === 0) {
@@ -38,13 +45,13 @@ function PromotionList() {
           No hay promociones
         </h3>
         <p className="mt-1 text-sm text-gray-500">
-          Comienza creando tu primera promoción de Matched Betting.
+          Comienza creando tu primera promocion de matched betting.
         </p>
         <div className="mt-6">
           <Link href="/promotions/new">
             <Button>
               <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-              Nueva Promoción
+              Registrar promocion
             </Button>
           </Link>
         </div>
@@ -94,12 +101,12 @@ export default function PromotionsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Promociones</h1>
           <p className="text-muted-foreground">
-            Gestiona tus bonos y promociones de Matched Betting.
+            Gestiona tus bonos y promociones de matched betting.
           </p>
         </div>
         <Link href="/promotions/new">
           <Button>
-            <PlusIcon className="mr-2 h-4 w-4" /> Nueva Promoción
+            <PlusIcon className="mr-2 h-4 w-4" /> Registrar promocion
           </Button>
         </Link>
       </div>

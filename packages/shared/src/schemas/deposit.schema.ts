@@ -64,6 +64,11 @@ export const UpdateDepositInputSchema = z.object({
   data: DepositSchema.partial(),
 });
 
+export const DeleteDepositResultSchema = z.object({
+  success: z.literal(true),
+  promotionId: z.string().optional(),
+});
+
 // =============================================
 // INFERRED TYPES
 // =============================================
@@ -73,3 +78,4 @@ export type DepositEntity = z.infer<typeof DepositEntitySchema>;
 export type DepositListInput = z.infer<typeof DepositListInputSchema>;
 export type UpdateDepositInput = z.infer<typeof UpdateDepositInputSchema>;
 export type DepositPromotionContext = z.infer<typeof DepositPromotionContextSchema>;
+export type DeleteDepositResult = z.infer<typeof DeleteDepositResultSchema>;

@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { CenteredErrorState } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,16 +16,15 @@ import {
 import { useDeposit } from "@/hooks/api/useDeposits";
 
 export default function DepositDetailPage() {
-  const params = useParams();
-  const depositId = params.id as string;
-
-  const { data: deposit, isLoading, error } = useDeposit(depositId);
+  const params = useParams<{ id: string }>();
+  const depositId = params.id;
+  const { data: deposit, isLoading, error, refetch } = useDeposit(depositId);
 
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex min-h-[400px] items-center justify-center">
-          <p>Cargando depósito...</p>
+          <p>Cargando deposito...</p>
         </div>
       </div>
     );
@@ -33,16 +33,15 @@ export default function DepositDetailPage() {
   if (error || !deposit) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex min-h-[400px] items-center justify-center">
-          <div className="text-center">
-            <p className="mb-4 text-red-500">
-              {error ? `Error: ${error.message}` : "Depósito no encontrado"}
-            </p>
-            <Link href="/deposits">
-              <Button>Volver a depósitos</Button>
-            </Link>
-          </div>
-        </div>
+        <CenteredErrorState
+          error={error}
+          fallbackMessage="Deposito no encontrado."
+          onRetry={() => {
+            void refetch();
+          }}
+          backHref="/deposits"
+          backLabel="Volver a depositos"
+        />
       </div>
     );
   }
@@ -54,11 +53,11 @@ export default function DepositDetailPage() {
           <Link href="/deposits">
             <Button variant="outline" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver a depósitos
+              Volver a depositos
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Depósito - €{deposit.amount}</h1>
+            <h1 className="text-3xl font-bold">Deposito - EUR {deposit.amount}</h1>
             <p className="text-muted-foreground">{deposit.bookmaker}</p>
           </div>
         </div>
@@ -73,22 +72,20 @@ export default function DepositDetailPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Información del Depósito</CardTitle>
-            <CardDescription>Detalles básicos del depósito</CardDescription>
+            <CardTitle>Informacion del deposito</CardTitle>
+            <CardDescription>Detalles basicos del deposito</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <div>
               <p className="text-sm font-medium">Cantidad</p>
-              <p className="text-muted-foreground text-sm">€{deposit.amount}</p>
+              <p className="text-muted-foreground text-sm">EUR {deposit.amount}</p>
             </div>
             <div>
-              <p className="text-sm font-medium">Casa de apuestas</p>
-              <p className="text-muted-foreground text-sm">
-                {deposit.bookmaker}
-              </p>
+              <p className="text-sm font-medium">Bookmaker</p>
+              <p className="text-muted-foreground text-sm">{deposit.bookmaker}</p>
             </div>
             <div>
-              <p className="text-sm font-medium">Fecha de creación</p>
+              <p className="text-sm font-medium">Fecha de creacion</p>
               <p className="text-muted-foreground text-sm">
                 {new Date(deposit.createdAt).toLocaleDateString()}
               </p>
@@ -104,33 +101,29 @@ export default function DepositDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Contexto de Promoción</CardTitle>
-            <CardDescription>
-              Información sobre promociones asociadas
-            </CardDescription>
+            <CardTitle>Contexto de promocion</CardTitle>
+            <CardDescription>Informacion de promociones asociadas</CardDescription>
           </CardHeader>
           <CardContent>
             {deposit.promotionContext?.promotionId ? (
               <div className="space-y-2">
                 <div>
-                  <p className="text-sm font-medium">Promoción ID</p>
+                  <p className="text-sm font-medium">Promocion ID</p>
                   <p className="text-muted-foreground text-sm">
                     {deposit.promotionContext.promotionId}
                   </p>
                 </div>
                 <div>
-                  <Link
-                    href={`/promotions/${deposit.promotionContext.promotionId}`}
-                  >
+                  <Link href={`/promotions/${deposit.promotionContext.promotionId}`}>
                     <Button variant="outline" size="sm">
-                      Ver promoción
+                      Ver promocion
                     </Button>
                   </Link>
                 </div>
               </div>
             ) : (
               <p className="text-muted-foreground">
-                No está asociado a ninguna promoción
+                No esta asociado a ninguna promocion.
               </p>
             )}
           </CardContent>

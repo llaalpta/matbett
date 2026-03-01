@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { getFieldVisualState } from "@/utils/fieldVisualState";
+
 import { FormFieldLabel } from "./FormFieldLabel";
 
 interface CheckboxFieldProps<
@@ -63,11 +64,13 @@ export function CheckboxField<
           <FormItem
             data-visual-state={visualState}
             className={cn(
-              "flex flex-row items-center space-x-3 space-y-0 px-3 h-10 transition-colors",
-              bordered && "border rounded-md",
+              "flex h-10 flex-row items-center space-y-0 space-x-3 px-3 transition-colors",
+              bordered && "rounded-md border",
               // Aplicar estilos warning/error al contenedor
-              visualState === "warning" && "border border-warning bg-warning/10 rounded-md",
-              visualState === "error" && "border border-destructive bg-destructive/10 rounded-md",
+              visualState === "warning" &&
+                "border-warning bg-warning/10 rounded-md border",
+              visualState === "error" &&
+                "border-destructive bg-destructive/10 rounded-md border",
               className
             )}
           >
@@ -75,8 +78,9 @@ export function CheckboxField<
               <Checkbox
                 checked={field.value}
                 onCheckedChange={(checked) => {
-                  field.onChange(checked);
-                  onValueChange?.(checked as boolean);
+                  const nextValue = checked === true;
+                  field.onChange(nextValue);
+                  onValueChange?.(nextValue);
                 }}
                 disabled={disabled}
                 required={required}
@@ -89,11 +93,7 @@ export function CheckboxField<
                 required={required}
                 tooltip={tooltip}
               />
-              {description && (
-                <FormDescription>
-                  {description}
-                </FormDescription>
-              )}
+              {description && <FormDescription>{description}</FormDescription>}
             </div>
             {displayError && <FormMessage />}
           </FormItem>

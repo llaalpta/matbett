@@ -10,8 +10,9 @@ import {
   PromotionCardinalitySchema,
   ActivationMethodSchema,
 } from './enums';
-import { AbsoluteTimeframeSchema, AvailableTimeframesSchema } from './timeframe.schema';
+import { AbsoluteTimeframeSchema } from './timeframe.schema';
 import { PhaseSchema, PhaseEntitySchema } from './phase.schema';
+import { QualifyConditionSchema, QualifyConditionEntitySchema } from './qualify-condition.schema';
 import { FilterValueSchema } from './pagination.schema'; // Importar filtro seguro
 
 // =============================================
@@ -45,15 +46,17 @@ const PromotionStateTimestampsSchema = z.object({
  */
 export const PromotionSchema = z.object({
   id: z.string().optional(),
+  clientId: z.string().uuid().optional(),
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().nullish(),
   bookmaker: BookmakerSchema,
   status: PromotionStatusSchema.optional(),
   
   // Fecha genérica asociada al estado actual
-  statusDate: z.coerce.date().nullish(),
+  statusDate: z.date(),
 
   phases: z.array(PhaseSchema).min(1),
+  availableQualifyConditions: z.array(QualifyConditionSchema),
   timeframe: AbsoluteTimeframeSchema,
   cardinality: PromotionCardinalitySchema,
   activationMethod: ActivationMethodSchema.optional(),
@@ -75,8 +78,7 @@ export const PromotionEntitySchema = PromotionSchema
     totalBalance: z.number(),
     // Sobrescribir con PhaseEntitySchema (que incluye tracking en nested entities)
     phases: z.array(PhaseEntitySchema).min(1),
-    // Campo calculado en backend (no persistido en DB promotion table), usado para UI de timeframes
-    availableTimeframes: AvailableTimeframesSchema.optional(),
+    availableQualifyConditions: z.array(QualifyConditionEntitySchema),
     ...PromotionStateTimestampsSchema.shape,
     ...AuditTimestampsSchema.shape,
   });
@@ -105,7 +107,7 @@ export const PromotionListInputSchema = z.object({
  */
 export const UpdatePromotionInputSchema = z.object({
   id: z.string(),
-  data: PromotionSchema.partial(),
+  data: PromotionSchema,
 });
 
 // =============================================

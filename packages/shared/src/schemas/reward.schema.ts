@@ -70,15 +70,20 @@ const RewardStateTimestampsSchema = z.object({
  */
 const BaseRewardSchema = z.object({
   id: z.string().optional(),
+  clientId: z.string().uuid().optional(),
   value: requiredNumber(0),
   valueType: RewardValueTypeSchema,
   activationMethod: ActivationMethodSchema,
   claimMethod: ClaimMethodSchema,
+  activationRestrictions: z.string().nullish(),
   claimRestrictions: z.string().nullish(),
+  withdrawalRestrictions: z.string().nullish(),
   status: RewardStatusSchema.optional(),
-  statusDate: z.date().nullable().optional(), // Nueva propiedad para tracking histórico
-  // ❌ timeframe eliminado - Ver nota arriba sobre arquitectura de timeframes
+  statusDate: z.date(), // Nueva propiedad para tracking histórico
   qualifyConditions: z.array(QualifyConditionSchema).min(0),
+}).refine((value) => Boolean(value.id || value.clientId), {
+  message: 'Reward requires id or clientId',
+  path: ['id'],
 });
 
 /**
@@ -88,7 +93,8 @@ const RewardEntityCommonFieldsSchema = z.object({
   id: z.string(),
   status: RewardStatusSchema,
   phaseId: z.string(),
-  promotionId: z.string().optional(), // ID de la promoción (solo cuando se consulta standalone, no en contexto anidado)
+  promotionId: z.string().optional(), // ID de la promocion (solo cuando se consulta standalone, no en contexto anidado)
+  canDelete: z.boolean(),
   totalBalance: z.number(),
 });
 
@@ -96,12 +102,19 @@ const RewardEntityCommonFieldsSchema = z.object({
 // VALIDATION HELPERS
 // =============================================
 
+type RewardValueType = z.infer<typeof RewardValueTypeSchema>;
+type QualifyConditionInput = z.infer<typeof QualifyConditionSchema>;
+
 /**
  * Valida coherencia entre reward.valueType y qualifyConditions.contributesToRewardValue
  * Se aplica a todos los tipos de Reward con .superRefine()
  */
 function validateRewardValueTypeCoherence(
-  data: { valueType: string; qualifyConditions: any[] },
+  data: {
+    value: number | undefined;
+    valueType: RewardValueType;
+    qualifyConditions: QualifyConditionInput[];
+  },
   ctx: z.RefinementCtx
 ) {
   const calculatingConditions = data.qualifyConditions.filter(
@@ -110,6 +123,14 @@ function validateRewardValueTypeCoherence(
   );
 
   if (data.valueType === 'FIXED') {
+    if (typeof data.value === 'number' && !Number.isInteger(data.value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Para valor fijo, la recompensa debe ser un número entero',
+        path: ['value'],
+      });
+    }
+
     // FIXED: ninguna condition debe tener contributesToRewardValue: true
     if (calculatingConditions.length > 0) {
       ctx.addIssue({
@@ -146,61 +167,55 @@ function validateRewardValueTypeCoherence(
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  * NOTA: No aplicamos .superRefine() aquí porque estos schemas se extienden para crear EntitySchemas
  */
-const FreeBetRewardSchemaBase = BaseRewardSchema.extend({
+const FreeBetRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('FREEBET'),
   typeSpecificFields: FreeBetTypeSpecificFieldsSchema, // SNR movido aquí
   usageConditions: FreeBetUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  */
-const CashbackFreeBetRewardSchemaBase = BaseRewardSchema.extend({
+const CashbackFreeBetRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('CASHBACK_FREEBET'),
   typeSpecificFields: z.null().optional(), // Sin campos específicos
   usageConditions: CashbackUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  */
-const BonusRolloverRewardSchemaBase = BaseRewardSchema.extend({
+const BonusRolloverRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('BET_BONUS_ROLLOVER'),
   typeSpecificFields: z.null().optional(), // Sin campos específicos
   usageConditions: BonusRolloverUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  */
-const BonusNoRolloverRewardSchemaBase = BaseRewardSchema.extend({
+const BonusNoRolloverRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('BET_BONUS_NO_ROLLOVER'),
   typeSpecificFields: z.null().optional(), // Sin campos específicos
   usageConditions: BonusNoRolloverUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  */
-const EnhancedOddsRewardSchemaBase = BaseRewardSchema.extend({
+const EnhancedOddsRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('ENHANCED_ODDS'),
   typeSpecificFields: z.null().optional(), // Sin campos específicos
   usageConditions: EnhancedOddsUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 /**
  * Schema de INPUT - Sin usageTracking (calculado por backend)
  */
-const CasinoSpinsRewardSchemaBase = BaseRewardSchema.extend({
+const CasinoSpinsRewardSchemaBase = BaseRewardSchema.safeExtend({
   type: z.literal('CASINO_SPINS'),
   typeSpecificFields: z.null().optional(), // Sin campos específicos
   usageConditions: CasinoSpinsUsageConditionsSchema,
-  // ❌ Sin usageTracking - solo en EntitySchema
 });
 
 // Aplicar validación a los schemas INPUT (con .superRefine())
@@ -218,7 +233,7 @@ export const CasinoSpinsRewardSchema = CasinoSpinsRewardSchemaBase.superRefine(v
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const FreeBetRewardEntitySchema = FreeBetRewardSchemaBase.extend({
+export const FreeBetRewardEntitySchema = FreeBetRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: FreeBetUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -229,7 +244,7 @@ export const FreeBetRewardEntitySchema = FreeBetRewardSchemaBase.extend({
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const CashbackFreeBetRewardEntitySchema = CashbackFreeBetRewardSchemaBase.extend({
+export const CashbackFreeBetRewardEntitySchema = CashbackFreeBetRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: CashbackUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -240,7 +255,7 @@ export const CashbackFreeBetRewardEntitySchema = CashbackFreeBetRewardSchemaBase
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const BonusRolloverRewardEntitySchema = BonusRolloverRewardSchemaBase.extend({
+export const BonusRolloverRewardEntitySchema = BonusRolloverRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: BonusRolloverUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -251,7 +266,7 @@ export const BonusRolloverRewardEntitySchema = BonusRolloverRewardSchemaBase.ext
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const BonusNoRolloverRewardEntitySchema = BonusNoRolloverRewardSchemaBase.extend({
+export const BonusNoRolloverRewardEntitySchema = BonusNoRolloverRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: BonusNoRolloverUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -262,7 +277,7 @@ export const BonusNoRolloverRewardEntitySchema = BonusNoRolloverRewardSchemaBase
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const EnhancedOddsRewardEntitySchema = EnhancedOddsRewardSchemaBase.extend({
+export const EnhancedOddsRewardEntitySchema = EnhancedOddsRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: EnhancedOddsUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -273,7 +288,7 @@ export const EnhancedOddsRewardEntitySchema = EnhancedOddsRewardSchemaBase.exten
 /**
  * Schema de OUTPUT - Con usageTracking calculado por backend
  */
-export const CasinoSpinsRewardEntitySchema = CasinoSpinsRewardSchemaBase.extend({
+export const CasinoSpinsRewardEntitySchema = CasinoSpinsRewardSchemaBase.safeExtend({
   qualifyConditions: z.array(QualifyConditionEntitySchema).min(0), // ✅ Sobrescribir con EntitySchema (incluye tracking)
   usageTracking: CasinoSpinsUsageTrackingSchema.nullable(), // ✅ Tracking solo en OUTPUT
   ...RewardEntityCommonFieldsSchema.shape,
@@ -312,15 +327,7 @@ export const RewardEntitySchema = z.union([
  */
 export const UpdateRewardInputSchema = z.object({
   id: z.string(),
-  // Modificación para manejar parciales de una unión discriminada
-  data: z.discriminatedUnion('type', [
-    FreeBetRewardSchema.partial().extend({ type: z.literal('FREEBET') }),
-    CashbackFreeBetRewardSchema.partial().extend({ type: z.literal('CASHBACK_FREEBET') }),
-    BonusRolloverRewardSchema.partial().extend({ type: z.literal('BET_BONUS_ROLLOVER') }),
-    BonusNoRolloverRewardSchema.partial().extend({ type: z.literal('BET_BONUS_NO_ROLLOVER') }),
-    EnhancedOddsRewardSchema.partial().extend({ type: z.literal('ENHANCED_ODDS') }),
-    CasinoSpinsRewardSchema.partial().extend({ type: z.literal('CASINO_SPINS') }),
-  ]),
+  data: RewardSchema,
 });
 
 // =============================================
@@ -343,3 +350,4 @@ export type EnhancedOddsRewardEntity = z.infer<typeof EnhancedOddsRewardEntitySc
 export type CasinoSpinsRewardEntity = z.infer<typeof CasinoSpinsRewardEntitySchema>;
 export type RewardEntity = z.infer<typeof RewardEntitySchema>;
 export type UpdateRewardInput = z.infer<typeof UpdateRewardInputSchema>;
+

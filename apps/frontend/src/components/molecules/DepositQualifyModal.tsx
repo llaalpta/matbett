@@ -1,11 +1,7 @@
 "use client";
 
-import { useWatch, useFormContext, type FieldValues, type Path } from "react-hook-form";
-
-import type {
-  RewardQualifyConditionFormData,
-  DepositQualifyConditionServerModel,
-} from "@/types/hooks";
+import { QualifyConditionSchema } from "@matbett/shared";
+import { useFormContext, useWatch, type FieldValues, type Path } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,14 +11,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import type { DepositQualifyConditionServerModel } from "@/types/hooks";
 
 import { DepositWarnings } from "./DepositWarnings";
 import { DepositTracking } from "./tracking/DepositTracking";
 
-interface DepositQualifyModalProps {
+interface DepositQualifyModalProps<T extends FieldValues> {
   isOpen: boolean;
   onClose: () => void;
-  conditionPath: string; // Full path to the condition (e.g. "phases.0.rewards.1.qualifyConditions.2")
+  conditionPath: Path<T>; // Full path to the condition (e.g. "phases.0.rewards.1.qualifyConditions.2")
   conditionServerData?: DepositQualifyConditionServerModel; // Server data with tracking (for display only)
 }
 
@@ -36,26 +33,30 @@ export function DepositQualifyModal<T extends FieldValues = FieldValues>({
   onClose,
   conditionPath,
   conditionServerData,
-}: DepositQualifyModalProps) {
+}: DepositQualifyModalProps<T>) {
   const { control } = useFormContext<T>();
 
-  // Watch condition data from form (editable fields only, no tracking)
-  const conditionData = useWatch({
+  const conditionDataRaw = useWatch({
     control,
-    name: conditionPath as Path<T>,
-  }) as RewardQualifyConditionFormData | undefined;
+    name: conditionPath,
+  });
+
+  const parsedCondition = QualifyConditionSchema.safeParse(conditionDataRaw);
+  const conditionData = parsedCondition.success ? parsedCondition.data : undefined;
 
   // Get tracking amount from server data (read-only, calculated by backend)
   const trackingAmount = conditionServerData?.tracking?.depositAmount;
 
   // Type narrow to DEPOSIT condition
-  if (!conditionData || conditionData.type !== 'DEPOSIT') return null;
+  if (!conditionData || conditionData.type !== "DEPOSIT") {
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Registrar Depósito Calificatorio</DialogTitle>
+          <DialogTitle>Seguimiento de Deposito Calificatorio</DialogTitle>
         </DialogHeader>
 
         {/* Warnings based on condition requirements vs entered amount */}

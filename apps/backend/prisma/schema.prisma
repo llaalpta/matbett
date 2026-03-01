@@ -104,6 +104,9 @@ model Promotion {
 
   // Relaciones
   phases Phase[]
+  rewards Reward[]
+  // Pool de condiciones de calificacion reutilizables (nivel promocion)
+  availableQualifyConditions RewardQualifyCondition[]
 
   @@index([userId, status])
   @@index([bookmaker])
@@ -132,8 +135,6 @@ model Phase {
   promotionId String
   promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
 
-  // Pool de condiciones de calificación reutilizables
-  availableQualifyConditions RewardQualifyCondition[]
 
   // Rewards de esta fase
   rewards Reward[]
@@ -157,7 +158,9 @@ model Reward {
   valueType         String  @default("FIXED") // "FIXED", "CALCULATED_FROM_CONDITIONS"
   activationMethod  String  @default("AUTOMATIC")
   claimMethod       String  @default("AUTOMATIC") // "AUTOMATIC", "MANUAL_CLICK", "MANUAL_CODE", "CUSTOMER_SERVICE"
+  activationRestrictions String? // Restricciones de activacion/canjeo: opt-in, verificacion, plazos
   claimRestrictions String? // Restricciones de reclamación: timeouts (48h), delays (3 días), condiciones especiales
+  withdrawalRestrictions String? // Restricciones de retirada: cancelacion de bono, bloqueo temporal, etc.
   status            String  @default("QUALIFYING") // "QUALIFYING", "PENDING_TO_CLAIM", "CLAIMED", "RECEIVED", "IN_USE", "USED", "EXPIRED"
   totalBalance      Float   @default(0)
 
@@ -170,8 +173,10 @@ model Reward {
   expiredAt                    DateTime?
 
   // Relaciones
-  phaseId String
-  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  phaseId     String
+  phase       Phase     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
 
   // Qualify conditions que este reward usa (pueden ser del pool o propias)
   qualifyConditions RewardQualifyCondition[] @relation("RewardToQualifyConditions")
@@ -196,7 +201,8 @@ model Reward {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([phaseId, status])
+  @@index([promotionId, status])
+  @@index([phaseId])
   @@index([type])
   @@map("rewards")
 }
@@ -248,12 +254,8 @@ model RewardQualifyCondition {
   type                     String // "DEPOSIT", "BET", "LOSSES_CASHBACK"
   description              String? // Descripción opcional de la condición
   status                   String  @default("PENDING") // "PENDING", "ACTIVE", "FULFILLED", "FAILED"
-  // ❌ contributesToRewardValue eliminado - ahora solo existe dentro del JSON conditions como discriminador
   priority                 Int     @default(0)
   balance                  Float   @default(0)
-
-  // Dependencia con otra qualify condition
-  dependsOnQualifyConditionId String?
 
   // Timeframe de la qualify condition
   timeframe Json // Timeframe: AbsoluteTimeframe | RelativeTimeframe
@@ -270,9 +272,9 @@ model RewardQualifyCondition {
   failedAt     DateTime? // → FAILED (cuando falla la condición)
   expiredAt    DateTime? // → EXPIRED (cuando expira el periodo)
 
-  // Relación con fase (pool)
-  phaseId String
-  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  // Relacion con promocion (pool)
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
 
   // Relación con rewards que usan esta condición
   rewards Reward[] @relation("RewardToQualifyConditions")
@@ -288,7 +290,7 @@ model RewardQualifyCondition {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([phaseId, status])
+  @@index([promotionId, status])
   @@index([type])
   @@map("reward_qualify_conditions")
 }
@@ -390,3 +392,4 @@ model SystemConfig {
 
   @@map("system_config")
 }
+

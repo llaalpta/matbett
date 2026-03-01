@@ -1,5 +1,6 @@
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import unusedImports from 'eslint-plugin-unused-imports';
 
 export default [
   {
@@ -8,6 +9,7 @@ export default [
       'build/**',
       'node_modules/**',
       'coverage/**',
+      'prisma/**',
       '*.config.js',
       '*.config.mjs',
       'prisma/migrations/**',
@@ -27,16 +29,28 @@ export default [
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    plugins: {
+      'unused-imports': unusedImports,
+    },
     rules: {
       // TypeScript - Calidad de código
       '@typescript-eslint/no-unused-vars': [
-        'error',
+        'warn',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
         },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "TSAsExpression:not(TSAsExpression[typeAnnotation.type='TSConstKeyword']):not(TSAsExpression[typeAnnotation.type='TSConstType']):not(TSAsExpression[typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const'])",
+          message: 'No usar type assertions (solo se permite `as const`).',
+        },
+      ],
+      'unused-imports/no-unused-imports': 'warn',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
 
@@ -44,10 +58,10 @@ export default [
       'no-console': [
         'warn',
         {
-          allow: ['warn', 'error', 'info'],
+          allow: ['warn', 'error'],
         },
       ],
-      'no-debugger': 'warn',
+      'no-debugger': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
       eqeqeq: ['error', 'always'],

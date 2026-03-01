@@ -5,6 +5,7 @@ import React from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { RewardDepositQualifyConditionFormData } from "@/types/ui";
+import { formatCurrency, formatPercentage } from "@/utils/formatters";
 
 interface WarningType {
   type: "error" | "warning" | "info";
@@ -20,7 +21,6 @@ export function DepositWarnings({
   depositAmount,
   qualifyCondition,
 }: DepositWarningsProps) {
-  // Calcular warnings dinámicamente
   const warnings: WarningType[] = React.useMemo(() => {
     const warningsList: WarningType[] = [];
 
@@ -31,32 +31,31 @@ export function DepositWarnings({
     const conditions = qualifyCondition.conditions;
     const { firstDepositOnly, depositCode } = conditions;
 
-    // Type narrowing: solo mostrar warnings de CALCULATED VALUE
     if (conditions.contributesToRewardValue) {
       const { minAmount, maxAmount, bonusPercentage, maxBonusAmount } = conditions;
 
-      // Guard: Si faltan valores requeridos, no mostrar warnings de cálculo
-      if (minAmount === undefined || bonusPercentage === undefined || maxBonusAmount === undefined) {
+      if (
+        minAmount === undefined ||
+        bonusPercentage === undefined ||
+        maxBonusAmount === undefined
+      ) {
         return warningsList;
       }
 
-      // Warning: Depósito por debajo del mínimo
       if (depositAmount < minAmount) {
         warningsList.push({
           type: "error",
-          message: `El depósito debe ser de al menos ${minAmount}€ para calificar para el bonus.`,
+          message: `El depósito debe ser de al menos ${formatCurrency(minAmount)} para calificar para el bonus.`,
         });
       }
 
-      // Warning: Depósito por encima del máximo
       if (maxAmount && depositAmount > maxAmount) {
         warningsList.push({
           type: "warning",
-          message: `El depósito excede el máximo elegible de ${maxAmount}€. Solo se calculará bonus sobre ${maxAmount}€.`,
+          message: `El depósito excede el máximo elegible de ${formatCurrency(maxAmount)}. Sólo se calculará bonus sobre ${formatCurrency(maxAmount)}.`,
         });
       }
 
-      // Info: Cálculo del bonus esperado
       if (depositAmount >= minAmount && bonusPercentage > 0) {
         const eligibleAmount = maxAmount
           ? Math.min(depositAmount, maxAmount)
@@ -66,40 +65,44 @@ export function DepositWarnings({
 
         warningsList.push({
           type: "info",
-          message: `Bonus esperado: ${finalBonus.toFixed(2)}€ (${bonusPercentage.toFixed(0)}% sobre ${eligibleAmount}€)`,
+          message: `Bonus esperado: ${formatCurrency(finalBonus)} (${formatPercentage(
+            bonusPercentage,
+            "es-ES",
+            0
+          )} sobre ${formatCurrency(eligibleAmount)})`,
         });
       }
     } else {
-      // FIXED VALUE: solo verificar si coincide con targetAmount
       const { targetAmount } = conditions;
+      if (targetAmount === undefined) {
+        return warningsList;
+      }
 
       if (depositAmount !== targetAmount) {
         warningsList.push({
           type: "error",
-          message: `Debes depositar exactamente ${targetAmount}€ para calificar.`,
+          message: `Debes depositar exactamente ${formatCurrency(targetAmount)} para calificar.`,
         });
       } else {
         warningsList.push({
           type: "info",
-          message: `Depósito correcto: ${targetAmount}€`,
+          message: `Depósito correcto: ${formatCurrency(targetAmount)}`,
         });
       }
     }
 
-    // Warning: Primer depósito únicamente
     if (firstDepositOnly) {
       warningsList.push({
         type: "warning",
         message:
-          "Esta promoción solo aplica para el primer depósito en la casa de apuestas.",
+          "Esta promoción sólo aplica para el primer depósito en la casa de apuestas.",
       });
     }
 
-    // Info: Código de depósito requerido
     if (depositCode) {
       warningsList.push({
         type: "info",
-        message: `Asegúrate de usar el código de depósito: ${depositCode}`,
+        message: `Asegurate de usar el código de depósito: ${depositCode}`,
       });
     }
 

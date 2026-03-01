@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { CenteredErrorState } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,12 +16,18 @@ import {
 
 export default function BetDetailPage() {
   const params = useParams();
-  const betId = params.id as string;
+  const paramId = params.id;
+  const betId =
+    typeof paramId === "string"
+      ? paramId
+      : Array.isArray(paramId)
+        ? (paramId[0] ?? "")
+        : "";
 
-  // TODO: Implementar useBet hook cuando esté disponible
+  // TODO: Implement useBet hook when available.
   const bet = null;
   const isLoading = false;
-  const error = null;
+  const error: unknown = null;
 
   if (isLoading) {
     return (
@@ -35,16 +42,12 @@ export default function BetDetailPage() {
   if (error || !bet) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex min-h-[400px] items-center justify-center">
-          <div className="text-center">
-            <p className="mb-4 text-red-500">
-              Apuesta no encontrada o hook pendiente de implementación
-            </p>
-            <Link href="/bets">
-              <Button>Volver a apuestas</Button>
-            </Link>
-          </div>
-        </div>
+        <CenteredErrorState
+          error={error}
+          fallbackMessage="Apuesta no encontrada o hook pendiente de implementacion."
+          backHref="/bets"
+          backLabel="Volver a apuestas"
+        />
       </div>
     );
   }
@@ -75,15 +78,14 @@ export default function BetDetailPage() {
       <div className="max-w-2xl">
         <Card>
           <CardHeader>
-            <CardTitle>Información pendiente</CardTitle>
+            <CardTitle>Informacion pendiente</CardTitle>
             <CardDescription>
-              Esta página se completará cuando el hook useBet esté implementado
+              Esta pagina se completara cuando el hook useBet este implementado.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              Campos a mostrar: stake, odds, bookmaker, description, status,
-              etc.
+              Campos a mostrar: stake, odds, bookmaker, description y status.
             </p>
           </CardContent>
         </Card>

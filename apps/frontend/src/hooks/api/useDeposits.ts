@@ -8,6 +8,29 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useTRPC } from '@/lib/trpc';
 
+const invalidateDepositPromotionContext = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  trpc: ReturnType<typeof useTRPC>,
+  promotionId: string | undefined
+) => {
+  if (!promotionId) {
+    return;
+  }
+
+  queryClient.invalidateQueries({
+    queryKey: trpc.promotion.getById.queryKey({ id: promotionId }),
+  });
+  queryClient.invalidateQueries({
+    queryKey: trpc.promotion.getAnchorCatalog.queryKey({ promotionId }),
+  });
+  queryClient.invalidateQueries({
+    queryKey: trpc.promotion.getAnchorOccurrences.queryKey({ promotionId }),
+  });
+  queryClient.invalidateQueries({
+    queryKey: trpc.promotion.getAvailableQualifyConditions.queryKey({ promotionId }),
+  });
+};
+
 // =============================================
 // HOOKS DE QUERIES
 // =============================================
@@ -56,13 +79,17 @@ export const useCreateDeposit = () => {
 
   return useMutation({
     ...trpc.deposit.create.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (result) => {
         // Invalidar todas las listas de depósitos
         queryClient.invalidateQueries({
           queryKey: trpc.deposit.list.queryKey(),
         });
-        // TODO: Si el depósito afecta a una promoción (qualify condition), 
-        // invalidar también queries de promoción relacionadas si es posible saberlo.
+
+        invalidateDepositPromotionContext(
+          queryClient,
+          trpc,
+          result.promotionContext?.promotionId
+        );
       },
     }),
   });
@@ -87,6 +114,12 @@ export const useUpdateDeposit = () => {
           trpc.deposit.getById.queryKey({ id: variables.id }),
           result
         );
+
+        invalidateDepositPromotionContext(
+          queryClient,
+          trpc,
+          result.promotionContext?.promotionId
+        );
       },
     }),
   });
@@ -101,13 +134,15 @@ export const useDeleteDeposit = () => {
 
   return useMutation({
     ...trpc.deposit.delete.mutationOptions({
-      onSuccess: (_, variables) => {
+      onSuccess: (result, variables) => {
         queryClient.invalidateQueries({
           queryKey: trpc.deposit.list.queryKey(),
         });
         queryClient.removeQueries({
           queryKey: trpc.deposit.getById.queryKey({ id: variables.id }),
         });
+
+        invalidateDepositPromotionContext(queryClient, trpc, result.promotionId);
       },
     }),
   });

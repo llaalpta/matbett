@@ -1,7 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { DepositSchema, type Deposit } from "@matbett/shared";
-import { useCallback } from "react";
-import { useForm } from "react-hook-form";
+import { DepositSchema, bookmakerOptions, type Deposit } from "@matbett/shared";
+import { useForm, type UseFormReturn } from "react-hook-form";
 
 
 // Tipo inferido del schema (cuando haya tRPC route, usar RouterInputs)
@@ -9,17 +8,17 @@ type DepositFormData = Deposit;
 
 interface UseDepositFormOptions {
   initialData?: Partial<DepositFormData>;
-  onValueChange?: (amount: number) => void;
 }
 
-export const useDepositForm = ({ 
+export const useDepositForm = ({
   initialData,
-  onValueChange 
-}: UseDepositFormOptions = {}) => {
+}: UseDepositFormOptions = {}): {
+  formMethods: UseFormReturn<DepositFormData>;
+} => {
   const form = useForm<DepositFormData>({
     resolver: zodResolver(DepositSchema),
     defaultValues: {
-      bookmaker: "BET365",
+      bookmaker: bookmakerOptions[2].value,
       amount: 0,
       date: new Date(),
       code: "",
@@ -28,20 +27,7 @@ export const useDepositForm = ({
     mode: "onChange",
   });
 
-
-  // Handler para cambio de amount - compatible con InputField
-  const handleAmountChange = useCallback(
-    (value: number | undefined | string) => {
-      if (onValueChange && typeof value === 'number') {
-        onValueChange(value || 0);
-      }
-    },
-    [onValueChange]
-  );
-
   return {
     formMethods: form,
-    handleAmountChange,
-    isValid: form.formState.isValid,
   };
 };

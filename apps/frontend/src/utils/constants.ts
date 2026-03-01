@@ -37,8 +37,11 @@ export const getLabelFromConstant = <T extends Record<string, string>>(
  * @returns Schema Zod enum type-safe
  */
 export const enumFromObject = <T extends Record<string, string>>(obj: T) => {
-  const keys = Object.keys(obj) as [string, ...string[]];
-  return z.enum(keys);
+  const [firstKey, ...restKeys] = Object.keys(obj);
+  if (!firstKey) {
+    throw new Error("enumFromObject requiere al menos una clave");
+  }
+  return z.enum([firstKey, ...restKeys]);
 };
 
 /**

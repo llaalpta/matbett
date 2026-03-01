@@ -1,8 +1,8 @@
 import {
   PromotionSchema,
+  RewardSchema,
   type AbsoluteTimeframe,
   type QualifyConditionType,
-  type Bookmaker,
 } from "@matbett/shared";
 
 import type {
@@ -20,6 +20,16 @@ import type {
 // CONSTANTS
 // =============================================
 
+const createClientId = (): string => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const ensureClientId = (id?: string, clientId?: string): string | undefined =>
+  clientId ?? (id ? undefined : createClientId());
+
 export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe = {
   mode: "ABSOLUTE", // Literal type matches enum value
   start: new Date(),
@@ -31,12 +41,15 @@ export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe = {
 // =============================================
 
 const createBlankPromotion = (): PromotionFormData => ({
+  clientId: createClientId(),
   name: "",
   description: "",
-  bookmaker: "Bet365",
+  bookmaker: "bookmaker2",
   status: "NOT_STARTED",
+  statusDate: new Date(),
   cardinality: "SINGLE",
   activationMethod: "AUTOMATIC",
+  availableQualifyConditions: [],
   timeframe: {
     mode: "ABSOLUTE",
     start: new Date(),
@@ -60,7 +73,27 @@ export const buildDefaultPromotion = (
   const result = PromotionSchema.safeParse(serverData);
 
   if (result.success) {
-    return result.data; // Return the fully typed, parsed data
+    const parsed = result.data;
+    return {
+      ...parsed,
+      clientId: ensureClientId(parsed.id, parsed.clientId),
+      availableQualifyConditions: parsed.availableQualifyConditions.map((qc) => ({
+        ...qc,
+        clientId: ensureClientId(qc.id, qc.clientId),
+      })),
+      phases: parsed.phases.map((phase) => ({
+        ...phase,
+        clientId: ensureClientId(phase.id, phase.clientId),
+        rewards: phase.rewards.map((reward) => ({
+          ...reward,
+          clientId: ensureClientId(reward.id, reward.clientId),
+          qualifyConditions: reward.qualifyConditions.map((qc) => ({
+            ...qc,
+            clientId: ensureClientId(qc.id, qc.clientId),
+          })),
+        })),
+      })),
+    };
   } else {
     console.error(
       "Zod validation failed for initial promotion data:",
@@ -90,14 +123,13 @@ export const buildDefaultPhase = (
   phaseData?: PhaseServerModel
 ): PhaseFormData => ({
   id: phaseData?.id,
+  clientId: ensureClientId(phaseData?.id, phaseData?.clientId),
   name: phaseData?.name || "",
   description: phaseData?.description || "",
   status: phaseData?.status || "NOT_STARTED",
+  statusDate: phaseData?.statusDate ?? new Date(),
   timeframe: phaseData?.timeframe || buildDefaultAbsoluteTimeframe(),
   activationMethod: phaseData?.activationMethod || "AUTOMATIC",
-  availableQualifyConditions: buildDefaultQualifyConditions(
-    phaseData?.availableQualifyConditions
-  ),
   rewards: buildDefaultRewards(phaseData?.rewards),
 });
 
@@ -136,49 +168,58 @@ export const buildDefaultReward = (
 
     if ("qualifyConditions" in rewardData && rewardData.qualifyConditions) {
       qualifyConditions = buildDefaultQualifyConditions(
-        rewardData.qualifyConditions as RewardQualifyConditionServerModel[]
+        rewardData.qualifyConditions
       );
     }
 
-    return {
+    const fallbackReward = buildDefaultReward(rewardData.type);
+    return RewardSchema.parse({
       // IDs: se mantienen para edición
       id: rewardData.id,
+      clientId: ensureClientId(rewardData.id, rewardData.clientId),
 
       // Campos editables: del servidor
       type: rewardData.type,
-      value: rewardData.value,
-      valueType: rewardData.valueType,
-      activationMethod: rewardData.activationMethod,
-      claimMethod: rewardData.claimMethod,
+      value: rewardData.value ?? 0,
+      valueType: rewardData.valueType ?? "FIXED",
+      activationMethod: rewardData.activationMethod ?? "AUTOMATIC",
+      claimMethod: rewardData.claimMethod ?? "AUTOMATIC",
+      activationRestrictions: rewardData.activationRestrictions,
       claimRestrictions: rewardData.claimRestrictions,
-      status: rewardData.status,
-      // ❌ timeframe removido - Ver arquitectura en CLAUDE.md Pattern #11-13
+      withdrawalRestrictions: rewardData.withdrawalRestrictions,
+      status: rewardData.status ?? "QUALIFYING",
+      statusDate: rewardData.statusDate ?? new Date(),
       // El timeframe se determina por qualifyConditions y usageConditions
 
       // Campos anidados: se procesan recursivamente
       qualifyConditions,
-      usageConditions: rewardData.usageConditions,
-      // ❌ usageTracking removido - solo en ServerModel (OUTPUT), no en FormData (INPUT)
+      typeSpecificFields: rewardData.typeSpecificFields ?? fallbackReward.typeSpecificFields,
+      usageConditions: rewardData.usageConditions ?? fallbackReward.usageConditions,
 
       // Campos calculados: NO se cargan
-    } as RewardFormData;
+    });
   }
 
   // Si no hay datos del servidor, usar defaults por tipo
+  const baseQualifyConditions: RewardQualifyConditionFormData[] = [];
   const baseReward = {
+    clientId: createClientId(),
     type,
-    value: undefined,
+    value: 0,
     valueType: "FIXED" as const,
     activationMethod: "AUTOMATIC" as const,
     claimMethod: "AUTOMATIC" as const,
+    activationRestrictions: undefined,
     claimRestrictions: undefined,
+    withdrawalRestrictions: undefined,
     status: "QUALIFYING" as const,
-    qualifyConditions: [],
+    statusDate: new Date(),
+    qualifyConditions: baseQualifyConditions,
   };
 
   switch (type) {
     case "FREEBET":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         typeSpecificFields: {
           stakeNotReturned: true, // SNR: en typeSpecificFields, no en usageConditions
@@ -189,7 +230,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
-          } as AbsoluteTimeframe,
+          } satisfies AbsoluteTimeframe,
           // Comportamiento de uso
           mustUseComplete: true,
           voidConsumesBalance: true,
@@ -202,10 +243,10 @@ export const buildDefaultReward = (
             maxStake: undefined,
           },
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     case "CASHBACK_FREEBET":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         type: "CASHBACK_FREEBET",
         typeSpecificFields: null, // Sin campos específicos
@@ -215,16 +256,14 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
-          } as AbsoluteTimeframe,
-          cashbackPercentage: undefined,
-          maxCashbackAmount: undefined,
+          } satisfies AbsoluteTimeframe,
           // Restricciones de apuesta (con stake y outcome)
           ...buildDefaultRolloverBetRestrictions(),
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     case "BET_BONUS_ROLLOVER":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         type: "BET_BONUS_ROLLOVER",
         typeSpecificFields: null, // Sin campos específicos
@@ -234,26 +273,31 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
-          } as AbsoluteTimeframe,
+          } satisfies AbsoluteTimeframe,
           // Configuración del rollover
-          multiplier: undefined,
+          multiplier: 1,
           maxConversionMultiplier: undefined,
-          expectedLossPercentage: undefined,
+          expectedLossPercentage: 5,
           bonusCanBeUsedForBetting: true,
           minBetsRequired: undefined,
           // Restricciones de dinero/retiro
-          onlyBonusMoneyCountsForRollover: false,
-          onlyRealMoneyCountsForRollover: false,
+          rolloverContributionWallet: "MIXED",
+          realMoneyUsageRatio: 50,
           noWithdrawalsAllowedDuringRollover: false,
           bonusCancelledOnWithdrawal: false,
           allowDepositsAfterActivation: true,
+          returnedBetsCountForRollover: false,
+          cashoutBetsCountForRollover: false,
+          requireResolvedWithinTimeframe: true,
+          countOnlySettledBets: true,
+          maxConvertibleAmount: undefined,
           // Restricciones de apuesta (con stake y outcome)
           ...buildDefaultRolloverBetRestrictions(),
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     case "BET_BONUS_NO_ROLLOVER":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         type: "BET_BONUS_NO_ROLLOVER",
         typeSpecificFields: null, // Sin campos específicos
@@ -263,31 +307,39 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
-          } as AbsoluteTimeframe,
+          } satisfies AbsoluteTimeframe,
           maxConversionMultiplier: undefined,
-          // Restricciones de apuesta (con stake, sin outcome)
+          maxConvertibleAmount: undefined,
+          // Reglas de computo/validez
+          returnedBetsCountForUsage: false,
+          cashoutBetsCountForUsage: false,
+          requireResolvedWithinTimeframe: true,
+          countOnlySettledBets: true,
+          onlyFirstBetCounts: false,
+          // Restricciones de apuesta (con stake y outcome)
           ...buildDefaultBaseBetRestrictions(),
           stakeRestriction: {
             minStake: undefined,
             maxStake: undefined,
           },
+          requiredBetOutcome: "ANY",
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     case "ENHANCED_ODDS":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         type: "ENHANCED_ODDS",
         typeSpecificFields: null, // Sin campos específicos
         usageConditions: {
           type: "ENHANCED_ODDS",
           timeframe: {
-            mode: "ABSOLUTE",
-            start: new Date(),
-            end: undefined,
-          } as AbsoluteTimeframe,
-          normalOdds: undefined,
-          enhancedOdds: undefined,
+            mode: "PROMOTION",
+          },
+          normalOdds: 0,
+          enhancedOdds: 0,
+          enhancedOddsMode: "FIXED",
+          enhancementPercentage: undefined,
           // Restricciones de apuesta (con stake)
           stakeRestriction: {
             minStake: undefined,
@@ -301,13 +353,15 @@ export const buildDefaultReward = (
             maxOddsPerSelection: undefined,
             systemType: undefined,
           },
+          allowLiveOddsChanges: false,
           betTypeRestrictions: undefined,
           selectionRestrictions: undefined,
+          otherRestrictions: undefined,
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     case "CASINO_SPINS":
-      return {
+      return RewardSchema.parse({
         ...baseReward,
         type: "CASINO_SPINS",
         typeSpecificFields: null, // Sin campos específicos
@@ -317,12 +371,12 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: undefined,
-          } as AbsoluteTimeframe,
-          spinsCount: undefined,
+          } satisfies AbsoluteTimeframe,
+          spinsCount: 1,
           gameTitle: undefined,
           // Sin restricciones de apuesta (no aplica a casino)
         },
-      } as Partial<RewardFormData> as RewardFormData;
+      });
 
     default:
       throw new Error(`Tipo de reward no soportado: ${type}`);
@@ -384,21 +438,19 @@ export function buildDefaultQualifyCondition(
   const baseCondition = {
     // IDs: se mantienen para edición, undefined para creación
     id: conditionData?.id,
+    clientId: ensureClientId(conditionData?.id, conditionData?.clientId),
 
     // Campos editables: del servidor o defaults
     description: conditionData?.description || "",
-    otherRestrictions: conditionData?.otherRestrictions || "",
     status: conditionData?.status || ("PENDING" as const),
+    statusDate: conditionData?.statusDate ?? new Date(),
     timeframe:
       conditionData?.timeframe ||
       ({
         mode: "ABSOLUTE",
         start: new Date(),
         end: undefined,
-      } as AbsoluteTimeframe),
-    dependsOnQualifyConditionId: conditionData?.dependsOnQualifyConditionId,
-
-    // ❌ tracking removido - solo en ServerModel (OUTPUT), no en FormData (INPUT)
+      } satisfies AbsoluteTimeframe),
 
     // Campos calculados: NO se cargan, quedan undefined
     // depositRecordIds, betRecordIds, generatedRewardIds se omiten
@@ -421,6 +473,7 @@ export function buildDefaultQualifyCondition(
       const commonDepositFields = {
         depositCode: depositConditions?.depositCode ?? "",
         firstDepositOnly: depositConditions?.firstDepositOnly ?? true,
+        otherRestrictions: depositConditions?.otherRestrictions ?? "",
       };
 
       return {
@@ -493,6 +546,7 @@ export function buildDefaultQualifyCondition(
         betTypeRestrictions: betConditions?.betTypeRestrictions,
         selectionRestrictions: betConditions?.selectionRestrictions,
         onlyFirstBetCounts: betConditions?.onlyFirstBetCounts ?? false,
+        otherRestrictions: betConditions?.otherRestrictions ?? "",
       };
 
       return {
@@ -545,11 +599,16 @@ export function buildDefaultQualifyCondition(
         type: "LOSSES_CASHBACK",
         ...baseCondition,
         conditions: {
-          cashbackPercentage: lossesConditions?.cashbackPercentage ?? 0.1,
+          cashbackPercentage: lossesConditions?.cashbackPercentage ?? 100,
           maxCashbackAmount: lossesConditions?.maxCashbackAmount ?? 50,
-          calculationMethod:
-            lossesConditions?.calculationMethod ?? "NET_LOSSES",
+          calculationMethod: lossesConditions?.calculationMethod ?? "NET_LOSS",
           calculationPeriod: lossesConditions?.calculationPeriod,
+          returnedBetsCountForCashback:
+            lossesConditions?.returnedBetsCountForCashback ?? false,
+          cashoutBetsCountForCashback:
+            lossesConditions?.cashoutBetsCountForCashback ?? false,
+          countOnlySettledBets:
+            lossesConditions?.countOnlySettledBets ?? true,
           // Campos aplanados de BetConditionsSchema (opcionales)
           oddsRestriction: lossesConditions?.oddsRestriction,
           stakeRestriction: lossesConditions?.stakeRestriction,
@@ -560,6 +619,7 @@ export function buildDefaultQualifyCondition(
           betTypeRestrictions: lossesConditions?.betTypeRestrictions,
           selectionRestrictions: lossesConditions?.selectionRestrictions,
           onlyFirstBetCounts: lossesConditions?.onlyFirstBetCounts,
+          otherRestrictions: lossesConditions?.otherRestrictions ?? "",
         },
       };
     }
@@ -593,6 +653,7 @@ export const buildDefaultBaseBetRestrictions = () => ({
   allowLiveOddsChanges: false,
   betTypeRestrictions: undefined,
   selectionRestrictions: undefined,
+  otherRestrictions: undefined,
 });
 
 /**
@@ -606,3 +667,4 @@ export const buildDefaultRolloverBetRestrictions = () => ({
   },
   requiredBetOutcome: "ANY" as const,
 });
+

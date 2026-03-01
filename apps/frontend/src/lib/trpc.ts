@@ -16,13 +16,15 @@ import superjson from 'superjson';
 // =============================================
 
 function getBaseUrl() {
-  if (typeof window !== 'undefined')
+  if (typeof window !== 'undefined') {
     // Browser: usa path relativo
     return '';
+  }
 
-  if (process.env.VERCEL_URL)
+  if (process.env.VERCEL_URL) {
     // SSR en Vercel
     return `https://${process.env.VERCEL_URL}`;
+  }
 
   // SSR local
   return `http://localhost:${process.env.NEXT_PUBLIC_API_PORT ?? 3001}`;

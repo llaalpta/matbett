@@ -34,10 +34,10 @@ export function toDepositCreateInput(
 export function toDepositUpdateInput(data: Partial<Deposit>): Prisma.DepositUpdateInput {
   const updateInput: Prisma.DepositUpdateInput = {};
 
-  if (data.bookmaker !== undefined) updateInput.bookmaker = data.bookmaker;
-  if (data.amount !== undefined) updateInput.amount = data.amount;
-  if (data.date !== undefined) updateInput.date = data.date;
-  if (data.code !== undefined) updateInput.code = data.code;
+  if (data.bookmaker !== undefined) {updateInput.bookmaker = data.bookmaker;}
+  if (data.amount !== undefined) {updateInput.amount = data.amount;}
+  if (data.date !== undefined) {updateInput.date = data.date;}
+  if (data.code !== undefined) {updateInput.code = data.code;}
   if (data.qualifyConditionId !== undefined) {
     updateInput.qualifyCondition = data.qualifyConditionId
       ? { connect: { id: data.qualifyConditionId } }

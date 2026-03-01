@@ -12,7 +12,9 @@ export function calculateRelativeEndDate(
   start: string | Date,
   days: number
 ): string {
-  if (!start) return "";
+  if (!start) {
+    return "";
+  }
   const date = new Date(start);
   const newDate = new Date(date.getTime());
   newDate.setDate(date.getDate() + days);

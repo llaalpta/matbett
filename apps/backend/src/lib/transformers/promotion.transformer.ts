@@ -1,6 +1,8 @@
 import { createId } from '@paralleldrive/cuid2';
 import { Prisma } from '@prisma/client';
-import stringify from 'fast-json-stable-stringify';
+import { toInputJson } from '@/utils/prisma-json';
+import { requireNumber } from '@/utils/validation';
+import { BadRequestError } from '@/utils/errors';
 import type {
   Reward as PrismaReward,
   Phase as PrismaPhase,
@@ -12,17 +14,29 @@ import type {
   PromotionEntity,
   PhaseEntity,
   RewardEntity,
+  Reward,
   QualifyConditionEntity,
   QualifyCondition,
   Phase,
-  AvailableTimeframes,
-  AvailableTimeframesByType,
-  TimeframeEventTimestamp,
-  AnchorEvent,
+  AnchorCatalog,
+  AnchorCatalogByType,
+  AnchorOccurrences,
+  Timeframe,
+  UsageConditions,
 } from '@matbett/shared';
 import {
   TimeframeSchema,
+  AbsoluteTimeframeSchema,
+  promotionAnchorEventOptions,
+  phaseAnchorEventOptions,
+  rewardAnchorEventOptions,
+  qualifyConditionAnchorEventOptions,
   RewardStatusSchema,
+  RewardValueTypeSchema,
+  ActivationMethodSchema,
+  ClaimMethodSchema,
+  BookmakerSchema,
+  PromotionCardinalitySchema,
   PhaseStatusSchema,
   PromotionStatusSchema,
   QualifyConditionStatusSchema,
@@ -32,40 +46,30 @@ import {
   DepositQualifyTrackingSchema,
   BetQualifyTrackingSchema,
   LossesCashbackQualifyTrackingSchema,
-  FreeBetUsageConditionsSchema,
-  BonusRolloverUsageConditionsSchema,
-  BonusNoRolloverUsageConditionsSchema,
-  CashbackUsageConditionsSchema,
-  EnhancedOddsUsageConditionsSchema,
-  CasinoSpinsUsageConditionsSchema,
   FreeBetUsageTrackingSchema,
   BonusRolloverUsageTrackingSchema,
   BonusNoRolloverUsageTrackingSchema,
   CashbackUsageTrackingSchema,
   EnhancedOddsUsageTrackingSchema,
   CasinoSpinsUsageTrackingSchema,
-  FreeBetTypeSpecificFieldsSchema,
+  AnchorRefType,
 } from '@matbett/shared';
 import type { PromotionWithRelations } from '@/repositories/promotion.repository';
+import {
+  parseTypeSpecificFieldsByRewardType,
+  parseUsageConditionsByRewardType,
+} from './reward-shared.transformer';
 
 // =================================================================
 // SECTION 1: HELPERS
 // =================================================================
 
 /**
- * Safe cast helper for JSON fields
- * Converts a known object type to Prisma.InputJsonValue without 'unknown' casting
- */
-function toJson(data: object): Prisma.InputJsonValue {
-  return data as Prisma.InputJsonValue;
-}
-
-/**
  * Helper para extraer typeSpecificFields según el tipo de reward
  */
-function extractTypeSpecificFields(reward: { type: string; typeSpecificFields?: unknown }): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
-  if (reward.type === 'FREEBET' && 'typeSpecificFields' in reward && reward.typeSpecificFields) {
-    return toJson(reward.typeSpecificFields as object);
+function extractTypeSpecificFields(reward: Reward): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
+  if (reward.type === 'FREEBET' && reward.typeSpecificFields) {
+    return toInputJson(reward.typeSpecificFields);
   }
   return Prisma.DbNull;
 }
@@ -73,139 +77,242 @@ function extractTypeSpecificFields(reward: { type: string; typeSpecificFields?: 
 // Importar la función compartida desde qualify-condition.transformer
 import { extractQualifyConditions } from './qualify-condition.transformer';
 
-/**
- * Helper defensivo para obtener un ID del mapa de hashes.
- */
-const getConditionIdOrThrow = (hash: string, map: Map<string, string>): string => {
-  const id = map.get(hash);
+const getConditionIdOrThrow = (key: string, map: Map<string, string>): string => {
+  const id = map.get(key);
   if (!id) {
-    throw new Error(`[Integrity Error] No se encontró ID generado para el hash de condición: ${hash}`);
+    throw new Error(`[Integrity Error] No se encontró ID generado para la condición: ${key}`);
   }
   return id;
 };
 
+const getConditionKey = (qc: QualifyCondition): string => {
+  if (qc.id) {return `id:${qc.id}`;}
+  if (qc.clientId) {return `client:${qc.clientId}`;}
+  throw new Error('QualifyCondition requires id or clientId');
+};
+
+type AnchorEntityType = 'PROMOTION' | 'PHASE' | 'REWARD' | 'QUALIFY_CONDITION';
+
+const getAnchorRefKey = (
+  entityType: AnchorEntityType,
+  refType: AnchorRefType,
+  ref: string
+): string => `${entityType}:${refType}:${ref}`;
+
+const registerAnchorRef = (
+  refMap: Map<string, string>,
+  entityType: AnchorEntityType,
+  persistedId: string,
+  clientId?: string
+): void => {
+  refMap.set(getAnchorRefKey(entityType, 'persisted', persistedId), persistedId);
+  if (clientId) {
+    refMap.set(getAnchorRefKey(entityType, 'client', clientId), persistedId);
+  }
+};
+
+const resolveTimeframeAnchors = (
+  timeframe: Timeframe,
+  refMap: Map<string, string>
+): Timeframe => {
+  if (timeframe.mode !== 'RELATIVE') {
+    return timeframe;
+  }
+
+  const { entityType, entityRef, entityRefType } = timeframe.anchor;
+  const entityTypeKey: AnchorEntityType = entityType;
+
+  const persistedKey = getAnchorRefKey(entityTypeKey, 'persisted', entityRef);
+  const clientKey = getAnchorRefKey(entityTypeKey, 'client', entityRef);
+
+  const resolvedRef =
+    entityRefType === 'client'
+      ? refMap.get(clientKey)
+      : refMap.get(persistedKey);
+
+  if (!resolvedRef) {
+    throw new BadRequestError(
+      `Invalid relative timeframe anchor: ${entityType}:${entityRefType}:${entityRef}`
+    );
+  }
+
+  return {
+    ...timeframe,
+    anchor: {
+      ...timeframe.anchor,
+      entityRefType: persistedRefType,
+      entityRef: resolvedRef,
+    },
+  };
+};
+
+const resolveUsageConditionsAnchors = (
+  usageConditions: UsageConditions,
+  refMap: Map<string, string>
+): UsageConditions => {
+  return {
+    ...usageConditions,
+    timeframe: resolveTimeframeAnchors(usageConditions.timeframe, refMap),
+  };
+};
+
 /**
- * Genera la estructura de AvailableTimeframes para que el frontend sepa
+ * Genera el AnchorCatalog para que el frontend sepa
  * qué eventos (anchors) están disponibles para configurar fechas relativas.
  */
-export function generateAvailableTimeframes(promotion: PromotionWithRelations): AvailableTimeframes {
-  const timeframes: AvailableTimeframes = [];
+const persistedRefType: AnchorRefType = 'persisted';
 
-  // 1. PROMOTION LEVEL
-  const promotionTimestamps: TimeframeEventTimestamp[] = [
-    { event: 'ACTIVE' as AnchorEvent, eventLabel: 'Activación de Promoción', date: promotion.activatedAt?.toISOString() ?? '' },
-    { event: 'COMPLETED' as AnchorEvent, eventLabel: 'Finalización de Promoción', date: promotion.completedAt?.toISOString() ?? '' },
-    { event: 'EXPIRED' as AnchorEvent, eventLabel: 'Expiración de Promoción', date: promotion.expiredAt?.toISOString() ?? '' },
-  ];
 
-  timeframes.push({
+export function generateAnchorCatalog(promotion: PromotionWithRelations): AnchorCatalog {
+  const catalog: AnchorCatalog = [];
+
+  const promotionEvents = promotionAnchorEventOptions.map((option) => ({
+    event: option.value,
+    eventLabel: option.label,
+  }));
+
+  catalog.push({
     entityType: 'PROMOTION',
-    entityTypeLabel: 'Promoción',
-    entities: [{
-      entityId: promotion.id,
-      entityLabel: promotion.name,
-      timeStamps: promotionTimestamps,
-    }],
+    entityTypeLabel: 'Promotion',
+    entities: [
+      {
+        entityRefType: persistedRefType,
+        entityRef: promotion.id,
+        entityLabel: promotion.name,
+        events: promotionEvents,
+      },
+    ],
   });
 
-  // 2. PHASE LEVEL
-  const phaseEntities: AvailableTimeframesByType = {
+  const phaseEntries: AnchorCatalogByType = {
     entityType: 'PHASE',
-    entityTypeLabel: 'Fases',
+    entityTypeLabel: 'Phases',
     entities: [],
   };
-
-  // 3. REWARD LEVEL
-  const rewardEntities: AvailableTimeframesByType = {
+  const rewardEntries: AnchorCatalogByType = {
     entityType: 'REWARD',
-    entityTypeLabel: 'Recompensas',
+    entityTypeLabel: 'Rewards',
+    entities: [],
+  };
+  const qualifyEntries: AnchorCatalogByType = {
+    entityType: 'QUALIFY_CONDITION',
+    entityTypeLabel: 'Qualify Conditions',
     entities: [],
   };
 
-  // 4. QUALIFY CONDITION LEVEL
-  const qualifyConditionEntities: AvailableTimeframesByType = {
-    entityType: 'QUALIFY_CONDITION',
-    entityTypeLabel: 'Condiciones de Calificación',
-    entities: [],
-  };
+  for (const qc of promotion.availableQualifyConditions) {
+    const conditionEvents = qualifyConditionAnchorEventOptions.map((option) => ({
+      event: option.value,
+      eventLabel: option.label,
+    }));
+
+    qualifyEntries.entities.push({
+      entityRefType: persistedRefType,
+      entityRef: qc.id,
+      entityLabel: qc.description || qc.type + ' Condition',
+      events: conditionEvents,
+    });
+  }
 
   for (const phase of promotion.phases) {
-    // Add Phase
-    phaseEntities.entities.push({
-      entityId: phase.id,
+    const phaseEvents = phaseAnchorEventOptions.map((option) => ({
+      event: option.value,
+      eventLabel: option.label,
+    }));
+
+    phaseEntries.entities.push({
+      entityRefType: persistedRefType,
+      entityRef: phase.id,
       entityLabel: phase.name,
-      timeStamps: [
-        { event: 'ACTIVE' as AnchorEvent, eventLabel: 'Activación de Fase', date: phase.activatedAt?.toISOString() ?? '' },
-        { event: 'COMPLETED' as AnchorEvent, eventLabel: 'Finalización de Fase', date: phase.completedAt?.toISOString() ?? '' },
-        { event: 'EXPIRED' as AnchorEvent, eventLabel: 'Expiración de Fase', date: phase.expiredAt?.toISOString() ?? '' },
-      ],
+      events: phaseEvents,
     });
 
-    // Add Qualify Conditions within Phase (from pool)
-    if (phase.availableQualifyConditions) {
-      for (const qc of phase.availableQualifyConditions) {
-        qualifyConditionEntities.entities.push({
-          entityId: qc.id,
-          entityLabel: qc.description || `${qc.type} Condition`,
-          timeStamps: [
-            { event: 'STARTED' as AnchorEvent, eventLabel: 'Inicio de condición', date: qc.startedAt?.toISOString() ?? '' },
-            { event: 'FULFILLED' as AnchorEvent, eventLabel: 'Condición cumplida', date: qc.qualifiedAt?.toISOString() ?? '' },
-            { event: 'FAILED' as AnchorEvent, eventLabel: 'Condición fallida', date: qc.failedAt?.toISOString() ?? '' },
-            { event: 'EXPIRED' as AnchorEvent, eventLabel: 'Condición expirada', date: qc.expiredAt?.toISOString() ?? '' },
-          ]
-        });
-      }
-    }
-
-    // Add Rewards within Phase
     for (const reward of phase.rewards) {
-      // Asumimos eventos estándar de Reward
-      rewardEntities.entities.push({
-        entityId: reward.id,
-        entityLabel: `${phase.name} - ${reward.type} (${reward.value})`,
-        timeStamps: [
-          { event: 'PENDING_TO_CLAIM' as AnchorEvent, eventLabel: 'Condiciones Cumplidas', date: reward.qualifyConditionsFulfilledAt?.toISOString() ?? '' },
-          { event: 'CLAIMED' as AnchorEvent, eventLabel: 'Reclamado', date: reward.claimedAt?.toISOString() ?? '' },
-          { event: 'RECEIVED' as AnchorEvent, eventLabel: 'Recibido', date: reward.receivedAt?.toISOString() ?? '' },
-          { event: 'IN_USE' as AnchorEvent, eventLabel: 'Uso Iniciado', date: reward.useStartedAt?.toISOString() ?? '' },
-          { event: 'USED' as AnchorEvent, eventLabel: 'Uso Completado', date: reward.useCompletedAt?.toISOString() ?? '' },
-          { event: 'EXPIRED' as AnchorEvent, eventLabel: 'Expirado', date: reward.expiredAt?.toISOString() ?? '' },
-        ],
+      const rewardEvents = rewardAnchorEventOptions.map((option) => ({
+        event: option.value,
+        eventLabel: option.label,
+      }));
+
+      rewardEntries.entities.push({
+        entityRefType: persistedRefType,
+        entityRef: reward.id,
+        entityLabel: phase.name + ' - ' + reward.type + ' (' + reward.value + ')',
+        events: rewardEvents,
       });
     }
   }
 
-  if (phaseEntities.entities.length > 0) timeframes.push(phaseEntities);
-  if (rewardEntities.entities.length > 0) timeframes.push(rewardEntities);
-  if (qualifyConditionEntities.entities.length > 0) timeframes.push(qualifyConditionEntities);
+  if (phaseEntries.entities.length > 0) {catalog.push(phaseEntries);}
+  if (rewardEntries.entities.length > 0) {catalog.push(rewardEntries);}
+  if (qualifyEntries.entities.length > 0) {catalog.push(qualifyEntries);}
 
-  // --- DIAGNÓSTICO ---
-  console.log('🔍 Generated Available Timeframes:', JSON.stringify(timeframes, null, 2));
-
-  return timeframes;
+  return catalog;
 }
 
-/**
- * Helper para mapear status + statusDate a los campos de fecha de Prisma (Promotion/Phase)
- */
-function mapStatusDates(status: string | undefined, statusDate: Date | null | undefined) {
+export function generateAnchorOccurrences(promotion: PromotionWithRelations): AnchorOccurrences {
+  const occurrences: AnchorOccurrences = [
+    { entityType: 'PROMOTION', entityRefType: persistedRefType, entityRef: promotion.id, event: 'ACTIVE', occurredAt: promotion.activatedAt },
+    { entityType: 'PROMOTION', entityRefType: persistedRefType, entityRef: promotion.id, event: 'COMPLETED', occurredAt: promotion.completedAt },
+    { entityType: 'PROMOTION', entityRefType: persistedRefType, entityRef: promotion.id, event: 'EXPIRED', occurredAt: promotion.expiredAt },
+  ];
+
+  for (const phase of promotion.phases) {
+    occurrences.push(
+      { entityType: 'PHASE', entityRefType: persistedRefType, entityRef: phase.id, event: 'ACTIVE', occurredAt: phase.activatedAt },
+      { entityType: 'PHASE', entityRefType: persistedRefType, entityRef: phase.id, event: 'COMPLETED', occurredAt: phase.completedAt },
+      { entityType: 'PHASE', entityRefType: persistedRefType, entityRef: phase.id, event: 'EXPIRED', occurredAt: phase.expiredAt },
+    );
+
+    for (const reward of phase.rewards) {
+      occurrences.push(
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'PENDING_TO_CLAIM', occurredAt: reward.qualifyConditionsFulfilledAt },
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'CLAIMED', occurredAt: reward.claimedAt },
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'RECEIVED', occurredAt: reward.receivedAt },
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'IN_USE', occurredAt: reward.useStartedAt },
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'USED', occurredAt: reward.useCompletedAt },
+        { entityType: 'REWARD', entityRefType: persistedRefType, entityRef: reward.id, event: 'EXPIRED', occurredAt: reward.expiredAt },
+      );
+    }
+  }
+
+  for (const qc of promotion.availableQualifyConditions) {
+    occurrences.push(
+      { entityType: 'QUALIFY_CONDITION', entityRefType: persistedRefType, entityRef: qc.id, event: 'STARTED', occurredAt: qc.startedAt },
+      { entityType: 'QUALIFY_CONDITION', entityRefType: persistedRefType, entityRef: qc.id, event: 'FULFILLED', occurredAt: qc.qualifiedAt },
+      { entityType: 'QUALIFY_CONDITION', entityRefType: persistedRefType, entityRef: qc.id, event: 'FAILED', occurredAt: qc.failedAt },
+      { entityType: 'QUALIFY_CONDITION', entityRefType: persistedRefType, entityRef: qc.id, event: 'EXPIRED', occurredAt: qc.expiredAt },
+    );
+  }
+
+  return occurrences;
+}
+
+function mapStatusDates(status: string | undefined, statusDate: Date | undefined) {
   const dates: { activatedAt?: Date | null; completedAt?: Date | null; expiredAt?: Date | null } = {};
   
-  if (!status) return dates;
+  if (!status) {return dates;}
 
   // Si hay una fecha explícita proporcionada por el usuario, la usamos.
   // Si no, usamos la fecha actual (now).
-  const dateToUse = statusDate ?? new Date();
 
   switch (status) {
     case 'ACTIVE':
-      dates.activatedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.activatedAt = statusDate;
       break;
     case 'COMPLETED':
-      dates.completedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.completedAt = statusDate;
       break;
     case 'EXPIRED':
-      dates.expiredAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.expiredAt = statusDate;
       break;
     // 'NOT_STARTED' no setea ninguna fecha específica, o podría limpiar activatedAt si se quisiera revertir
   }
@@ -215,7 +322,7 @@ function mapStatusDates(status: string | undefined, statusDate: Date | null | un
 /**
  * Helper para mapear status de Reward a sus fechas correspondientes
  */
-function mapRewardStatusDates(status: string | undefined, statusDate: Date | null | undefined) {
+function mapRewardStatusDates(status: string | undefined, statusDate: Date | undefined) {
   const dates: { 
     qualifyConditionsFulfilledAt?: Date | null; 
     claimedAt?: Date | null; 
@@ -225,27 +332,44 @@ function mapRewardStatusDates(status: string | undefined, statusDate: Date | nul
     expiredAt?: Date | null; 
   } = {};
 
-  if (!status) return dates;
-  const dateToUse = statusDate ?? new Date();
+  if (!status) {return dates;}
 
   switch (status) {
     case 'PENDING_TO_CLAIM':
-      dates.qualifyConditionsFulfilledAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.qualifyConditionsFulfilledAt = statusDate;
       break;
     case 'CLAIMED':
-      dates.claimedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.claimedAt = statusDate;
       break;
     case 'RECEIVED':
-      dates.receivedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.receivedAt = statusDate;
       break;
     case 'IN_USE':
-      dates.useStartedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.useStartedAt = statusDate;
       break;
     case 'USED':
-      dates.useCompletedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.useCompletedAt = statusDate;
       break;
     case 'EXPIRED':
-      dates.expiredAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.expiredAt = statusDate;
       break;
     // 'QUALIFYING' no tiene campo de fecha explícito. Su "fecha de inicio" es el createdAt del registro.
   }
@@ -255,7 +379,7 @@ function mapRewardStatusDates(status: string | undefined, statusDate: Date | nul
 /**
  * Helper para mapear status de QualifyCondition a sus fechas correspondientes
  */
-function mapQualifyConditionStatusDates(status: string | undefined, statusDate: Date | null | undefined) {
+function mapQualifyConditionStatusDates(status: string | undefined, statusDate: Date | undefined) {
   const dates: { 
     startedAt?: Date | null; 
     qualifiedAt?: Date | null; 
@@ -263,21 +387,32 @@ function mapQualifyConditionStatusDates(status: string | undefined, statusDate: 
     expiredAt?: Date | null; 
   } = {};
 
-  if (!status) return dates;
-  const dateToUse = statusDate ?? new Date();
+  if (!status) {return dates;}
 
   switch (status) {
     case 'QUALIFYING':
-      dates.startedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.startedAt = statusDate;
       break;
     case 'FULFILLED':
-      dates.qualifiedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.qualifiedAt = statusDate;
       break;
     case 'FAILED':
-      dates.failedAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.failedAt = statusDate;
       break;
     case 'EXPIRED': // QualifyCondition también puede expirar
-      dates.expiredAt = dateToUse;
+      if (!statusDate) {
+        throw new BadRequestError('statusDate is required when changing status.');
+      }
+      dates.expiredAt = statusDate;
       break;
     // 'PENDING' no tiene campo de fecha explícito.
   }
@@ -296,76 +431,127 @@ export function toPromotionCreateInput(
   promotion: Promotion,
   userId: string
 ): Prisma.PromotionCreateInput {
+  const promotionId = createId();
   const promotionDates = mapStatusDates(promotion.status, promotion.statusDate);
+  const conditionKeyToIdMap = new Map<string, string>();
+  const anchorRefMap = new Map<string, string>();
+  const conditionsToCreate: Prisma.RewardQualifyConditionCreateWithoutPromotionInput[] = [];
+  const phasesWithIds = promotion.phases.map((phase) => ({
+    phase,
+    phaseId: phase.id ?? createId(),
+    rewardsWithIds: phase.rewards.map((reward) => ({
+      reward,
+      rewardId: reward.id ?? createId(),
+    })),
+  }));
+
+  registerAnchorRef(anchorRefMap, 'PROMOTION', promotionId, promotion.clientId);
+  for (const phaseData of phasesWithIds) {
+    registerAnchorRef(
+      anchorRefMap,
+      'PHASE',
+      phaseData.phaseId,
+      phaseData.phase.clientId
+    );
+    for (const rewardData of phaseData.rewardsWithIds) {
+      registerAnchorRef(
+        anchorRefMap,
+        'REWARD',
+        rewardData.rewardId,
+        rewardData.reward.clientId
+      );
+    }
+  }
+
+  const ensureCondition = (qc: QualifyCondition): string => {
+    const key = getConditionKey(qc);
+    const existing = conditionKeyToIdMap.get(key);
+    if (existing) {return existing;}
+
+    const generatedId = qc.id ?? createId();
+    const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
+    conditionKeyToIdMap.set(key, generatedId);
+    registerAnchorRef(anchorRefMap, 'QUALIFY_CONDITION', generatedId, qc.clientId);
+    conditionsToCreate.push({
+      id: generatedId,
+      type: qc.type,
+      description: qc.description,
+      status: qc.status || 'PENDING',
+      timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
+      conditions: extractQualifyConditions(qc),
+      ...qcDates,
+    });
+    return generatedId;
+  };
+
+  for (const qc of promotion.availableQualifyConditions) {
+    ensureCondition(qc);
+  }
+
+  for (const phaseData of phasesWithIds) {
+    for (const rewardData of phaseData.rewardsWithIds) {
+      const reward = rewardData.reward;
+      for (const qc of reward.qualifyConditions) {
+        ensureCondition(qc);
+      }
+    }
+  }
 
   return {
+    id: promotionId,
     name: promotion.name,
     description: promotion.description,
     bookmaker: promotion.bookmaker,
     status: promotion.status || 'NOT_STARTED',
-    timeframe: toJson(promotion.timeframe),
+    timeframe: toInputJson(resolveTimeframeAnchors(promotion.timeframe, anchorRefMap)),
     cardinality: promotion.cardinality,
     activationMethod: promotion.activationMethod || 'AUTOMATIC',
     user: { connect: { id: userId } },
-    
-    // Mapeo de fechas de estado de Promoción
+
+    // Mapeo de fechas de estado de Promocion
     ...promotionDates,
+    availableQualifyConditions: { create: conditionsToCreate },
 
     phases: {
-      create: promotion.phases.map((phase) => {
+      create: phasesWithIds.map((phaseData) => {
+        const phase = phaseData.phase;
         const phaseDates = mapStatusDates(phase.status, phase.statusDate);
-        const conditionHashToIdMap = new Map<string, string>();
-        // Use strict Prisma type for the array
-        const uniqueConditionsToCreate: Prisma.RewardQualifyConditionCreateWithoutPhaseInput[] = [];
-        const allConditions = phase.rewards.flatMap(r => r.qualifyConditions);
 
-        for (const qc of allConditions) {
-          const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate); // Usar statusDate si existe
-          const hash = stringify(qc); // Hash estable
-          if (!conditionHashToIdMap.has(hash)) {
-            const newId = createId();
-            conditionHashToIdMap.set(hash, newId);
-            uniqueConditionsToCreate.push({
-              id: newId,
-              type: qc.type,
-              description: qc.description,
-              status: qc.status || 'PENDING',
-              // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions
-              timeframe: toJson(qc.timeframe),
-              conditions: extractQualifyConditions(qc),
-              ...qcDates, // Fechas iniciales si nace con status
-            });
-          }
-        }
-
-        const rewardsCreatePayload = phase.rewards.map((reward) => {
-          const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate); // Usar statusDate si existe
+        const rewardsCreatePayload = phaseData.rewardsWithIds.map((rewardData) => {
+          const reward = rewardData.reward;
+          const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
           return {
+            id: rewardData.rewardId,
             type: reward.type,
-            value: reward.value,
+            value: requireNumber(reward.value, 'reward.value'),
             valueType: reward.valueType,
-            activationMethod: reward.activationMethod,
-            claimMethod: reward.claimMethod,
+            activationMethod: ActivationMethodSchema.parse(reward.activationMethod),
+            claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
+            activationRestrictions: reward.activationRestrictions,
             claimRestrictions: reward.claimRestrictions,
+            withdrawalRestrictions: reward.withdrawalRestrictions,
             status: reward.status || 'QUALIFYING',
             typeSpecificFields: extractTypeSpecificFields(reward),
-            usageConditions: reward.usageConditions ? toJson(reward.usageConditions) : Prisma.JsonNull,
+            usageConditions: reward.usageConditions
+              ? toInputJson(resolveUsageConditionsAnchors(reward.usageConditions, anchorRefMap))
+              : Prisma.JsonNull,
+            promotion: { connect: { id: promotionId } },
             qualifyConditions: {
-              connect: reward.qualifyConditions.map(qc => ({
-                id: getConditionIdOrThrow(stringify(qc), conditionHashToIdMap)
-              }))
+              connect: reward.qualifyConditions.map((qc) => ({
+                id: getConditionIdOrThrow(getConditionKey(qc), conditionKeyToIdMap),
+              })),
             },
-            ...rewardDates, // Fechas iniciales si nace con status
+            ...rewardDates,
           };
         });
 
         return {
+          id: phaseData.phaseId,
           name: phase.name,
           description: phase.description,
           status: phase.status || 'NOT_STARTED',
-          activationMethod: phase.activationMethod,
-          timeframe: toJson(phase.timeframe),
-          availableQualifyConditions: { create: uniqueConditionsToCreate },
+          activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
+          timeframe: toInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
           rewards: { create: rewardsCreatePayload },
           // Mapeo de fechas de estado de fase
           ...phaseDates,
@@ -375,22 +561,25 @@ export function toPromotionCreateInput(
   };
 }
 
-/**
- * Transforma un input parcial de Promotion a formato Prisma para actualizar,
- * usando una estrategia híbrida de "Application-Side IDs" y diffing.
- */
 export function toPromotionUpdateInput(
-  data: Partial<Promotion>
+  data: Partial<Promotion>,
+  promotionId: string
 ): Prisma.PromotionUpdateInput {
   const updateInput: Prisma.PromotionUpdateInput = {};
+  const anchorRefMap = new Map<string, string>();
+  registerAnchorRef(anchorRefMap, 'PROMOTION', promotionId, data.clientId);
   
-  if (data.name !== undefined) updateInput.name = data.name;
-  if (data.description !== undefined) updateInput.description = data.description;
-  if (data.bookmaker !== undefined) updateInput.bookmaker = data.bookmaker;
-  if (data.status !== undefined) updateInput.status = data.status;
-  if (data.timeframe !== undefined) updateInput.timeframe = toJson(data.timeframe);
-  if (data.cardinality !== undefined) updateInput.cardinality = data.cardinality;
-  if (data.activationMethod !== undefined) updateInput.activationMethod = data.activationMethod;
+  if (data.name !== undefined) {updateInput.name = data.name;}
+  if (data.description !== undefined) {updateInput.description = data.description;}
+  if (data.bookmaker !== undefined) {updateInput.bookmaker = data.bookmaker;}
+  if (data.status !== undefined) {updateInput.status = data.status;}
+  if (data.timeframe !== undefined) {
+    updateInput.timeframe = toInputJson(
+      resolveTimeframeAnchors(data.timeframe, anchorRefMap)
+    );
+  }
+  if (data.cardinality !== undefined) {updateInput.cardinality = data.cardinality;}
+  if (data.activationMethod !== undefined) {updateInput.activationMethod = data.activationMethod;}
 
   // Actualizar fechas de Promoción si cambia el status o se provee statusDate
   if (data.status) {
@@ -399,137 +588,208 @@ export function toPromotionUpdateInput(
   }
 
   if (data.phases !== undefined) {
-    const existingPhases = data.phases.filter(p => p.id) as Phase[];
-    const newPhases = data.phases.filter(p => !p.id) as Phase[];
-    const activePhaseIds = existingPhases.map(p => p.id!);
+    const phasesWithIds = data.phases.map((phase) => ({
+      phase,
+      phaseId: phase.id ?? createId(),
+      rewardsWithIds: phase.rewards.map((reward) => ({
+        reward,
+        rewardId: reward.id ?? createId(),
+      })),
+    }));
+
+    for (const phaseData of phasesWithIds) {
+      registerAnchorRef(
+        anchorRefMap,
+        'PHASE',
+        phaseData.phaseId,
+        phaseData.phase.clientId
+      );
+      for (const rewardData of phaseData.rewardsWithIds) {
+        registerAnchorRef(
+          anchorRefMap,
+          'REWARD',
+          rewardData.rewardId,
+          rewardData.reward.clientId
+        );
+      }
+    }
+
+    const existingPhases = phasesWithIds.filter(
+      (phaseData) => Boolean(phaseData.phase.id)
+    );
+    const newPhases = phasesWithIds.filter(
+      (phaseData) => !phaseData.phase.id
+    );
+    const activePhaseIds = existingPhases.map((phaseData) => phaseData.phaseId);
+
+    const rewardConditions = phasesWithIds.flatMap((phaseData) =>
+      phaseData.rewardsWithIds.flatMap((rewardData) => rewardData.reward.qualifyConditions)
+    );
+    const poolConditions = data.availableQualifyConditions ?? [];
+    const allConditions = [...poolConditions, ...rewardConditions];
+    const conditionMap = new Map<string, string>();
+    const newConditions: QualifyCondition[] = [];
+
+    for (const qc of allConditions) {
+      const key = getConditionKey(qc);
+      if (conditionMap.has(key)) {continue;}
+      if (qc.id) {
+        conditionMap.set(key, qc.id);
+        registerAnchorRef(anchorRefMap, 'QUALIFY_CONDITION', qc.id, qc.clientId);
+      } else {
+        const newId = createId();
+        conditionMap.set(key, newId);
+        registerAnchorRef(anchorRefMap, 'QUALIFY_CONDITION', newId, qc.clientId);
+        newConditions.push(qc);
+      }
+    }
+
+    const resolveId = (qc: QualifyCondition): string =>
+      getConditionIdOrThrow(getConditionKey(qc), conditionMap);
+
+    const activeConditionIds = allConditions
+      .filter((qc): qc is QualifyCondition & { id: string } => Boolean(qc.id))
+      .map((qc) => qc.id);
+
+    updateInput.availableQualifyConditions = {
+      deleteMany: { id: { notIn: activeConditionIds } },
+      create: newConditions.map((qc) => {
+        const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
+        const generatedId = resolveId(qc);
+        return {
+          id: generatedId,
+          type: qc.type,
+          description: qc.description,
+          status: qc.status || 'PENDING',
+          timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
+          conditions: extractQualifyConditions(qc),
+          ...qcDates,
+        };
+      }),
+      update: allConditions
+        .filter((qc): qc is QualifyCondition & { id: string } => Boolean(qc.id))
+        .map((qc) => {
+        const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
+        return {
+          where: { id: qc.id },
+          data: {
+            type: qc.type,
+            description: qc.description,
+            status: qc.status,
+            timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
+            conditions: extractQualifyConditions(qc),
+            ...qcDates,
+          }
+        };
+      })
+    };
 
     updateInput.phases = {
       deleteMany: { id: { notIn: activePhaseIds } },
-      create: newPhases.map(phase => transformNewPhaseWithIds(phase)),
-      
-      update: existingPhases.map(phase => {
-        // --- MAPA MAESTRO HÍBRIDO ---
-        const conditionMap = new Map<string, string>();
-        const allConditions = phase.rewards.flatMap(r => r.qualifyConditions);
-        
-        allConditions.filter(qc => qc.id).forEach(qc => {
-            conditionMap.set(qc.id!, qc.id!);
-        });
-        
-        const newConditions = allConditions.filter(qc => !qc.id);
-        const uniqueNewConditions: (QualifyCondition & { _generatedId: string })[] = [];
+      create: newPhases.map((phaseData) =>
+        transformNewPhaseWithIds(
+          phaseData,
+          resolveId,
+          promotionId,
+          anchorRefMap
+        )
+      ),
 
-        newConditions.forEach(qc => {
-            const hash = stringify(qc);
-            if (!conditionMap.has(hash)) {
-                const newId = createId();
-                conditionMap.set(hash, newId);
-                uniqueNewConditions.push({ ...qc, _generatedId: newId });
-            }
-        });
-
-        const resolveId = (qc: QualifyCondition): string => {
-            if (qc.id) {
-               const id = conditionMap.get(qc.id);
-               if(!id) throw new Error(`[Integrity Error] ID existente perdido: ${qc.id}`);
-               return id;
-            }
-            const hash = stringify(qc);
-            const id = conditionMap.get(hash);
-            if (!id) throw new Error(`[Integrity Error] Hash perdido para condición nueva: ${hash}`);
-            return id;
-        };
-
-        const activeConditionIds = allConditions.filter(qc => qc.id).map(qc => qc.id!);
-
+      update: existingPhases.map((phaseData) => {
+        const phase = phaseData.phase;
         const phaseDates = mapStatusDates(phase.status, phase.statusDate);
 
         return {
-          where: { id: phase.id! },
+          where: { id: phaseData.phaseId },
           data: {
             name: phase.name,
             description: phase.description,
             status: phase.status,
-            activationMethod: phase.activationMethod,
-            timeframe: toJson(phase.timeframe),
-            ...phaseDates, // Actualizar fechas de fase
-
-            availableQualifyConditions: {
-              deleteMany: { id: { notIn: activeConditionIds } },
-              
-              create: uniqueNewConditions.map(qc => {
-                const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate); // Usar statusDate si existe
-                return {
-                  id: qc._generatedId,
-                  type: qc.type,
-                  description: qc.description,
-                  status: qc.status || 'PENDING',
-                  // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions
-                  timeframe: toJson(qc.timeframe),
-                  conditions: extractQualifyConditions(qc),
-                  ...qcDates,
-                };
-              }),
-              
-              update: allConditions.filter(qc => qc.id).map(qc => {
-                const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate); // Usar statusDate si existe
-                return {
-                  where: { id: qc.id! },
-                  data: {
-                    type: qc.type,
-                    description: qc.description,
-                    status: qc.status,
-                    // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions
-                    timeframe: toJson(qc.timeframe),
-                    conditions: extractQualifyConditions(qc),
-                    ...qcDates,
-                  }
-                };
-              })
-            },
+            activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
+            timeframe: toInputJson(
+              resolveTimeframeAnchors(phase.timeframe, anchorRefMap)
+            ),
+            ...phaseDates,
 
             rewards: {
-              deleteMany: { id: { notIn: phase.rewards.filter(r => r.id).map(r => r.id!) } },
-              
-              create: phase.rewards.filter(r => !r.id).map(r => {
-                const rewardDates = mapRewardStatusDates(r.status, r.statusDate); // Usar statusDate si existe
+              deleteMany: {
+                id: {
+                  notIn: phaseData.rewardsWithIds
+                    .filter((rewardData) => Boolean(rewardData.reward.id))
+                    .map((rewardData) => rewardData.rewardId),
+                },
+              },
+
+              create: phaseData.rewardsWithIds
+                .filter((rewardData) => !rewardData.reward.id)
+                .map((rewardData) => {
+                const reward = rewardData.reward;
+                const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
                 return {
-                  type: r.type,
-                  value: r.value,
-                  valueType: r.valueType,
-                  activationMethod: r.activationMethod,
-                  claimMethod: r.claimMethod,
-                  claimRestrictions: r.claimRestrictions,
-                  status: r.status || 'QUALIFYING',
-                  typeSpecificFields: extractTypeSpecificFields(r),
-                  usageConditions: r.usageConditions ? toJson(r.usageConditions) : Prisma.JsonNull,
+                  id: rewardData.rewardId,
+                  type: reward.type,
+                  value: requireNumber(reward.value, 'reward.value'),
+                  valueType: reward.valueType,
+                  activationMethod: reward.activationMethod,
+                  claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
+                  activationRestrictions: reward.activationRestrictions,
+                  claimRestrictions: reward.claimRestrictions,
+                  withdrawalRestrictions: reward.withdrawalRestrictions,
+                  status: reward.status || 'QUALIFYING',
+                  typeSpecificFields: extractTypeSpecificFields(reward),
+                  usageConditions: reward.usageConditions
+                    ? toInputJson(
+                        resolveUsageConditionsAnchors(
+                          reward.usageConditions,
+                          anchorRefMap
+                        )
+                      )
+                    : Prisma.JsonNull,
+                  promotion: { connect: { id: promotionId } },
                   qualifyConditions: {
-                      connect: r.qualifyConditions.map(qc => ({ id: resolveId(qc) }))
+                    connect: reward.qualifyConditions.map((qc) => ({ id: resolveId(qc) }))
                   },
                   ...rewardDates,
                 };
               }),
 
-              update: phase.rewards.filter(r => r.id).map(r => {
-                const rewardDates = mapRewardStatusDates(r.status, r.statusDate); // Usar statusDate si existe
-                return {
-                  where: { id: r.id! },
+              update: phaseData.rewardsWithIds
+                .filter((rewardData) => Boolean(rewardData.reward.id))
+                .map((rewardData) => {
+                const reward = rewardData.reward;
+                const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
+                const rewardUpdateData: Prisma.RewardUpdateWithWhereUniqueWithoutPhaseInput = {
+                  where: { id: rewardData.rewardId },
                   data: {
-                      type: r.type,
-                      value: r.value,
-                      valueType: r.valueType,
-                      activationMethod: r.activationMethod,
-                      claimMethod: r.claimMethod,
-                      claimRestrictions: r.claimRestrictions,
-                      status: r.status,
-                      typeSpecificFields: extractTypeSpecificFields(r),
-                      usageConditions: r.usageConditions ? toJson(r.usageConditions) : Prisma.JsonNull,
-                      qualifyConditions: {
-                          set: r.qualifyConditions.map(qc => ({ id: resolveId(qc) }))
-                      },
-                      ...rewardDates,
+                    type: reward.type,
+                    valueType: reward.valueType,
+                    activationMethod: reward.activationMethod,
+                    claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
+                    activationRestrictions: reward.activationRestrictions,
+                    claimRestrictions: reward.claimRestrictions,
+                    withdrawalRestrictions: reward.withdrawalRestrictions,
+                    status: reward.status,
+                    typeSpecificFields: extractTypeSpecificFields(reward),
+                    usageConditions: reward.usageConditions
+                      ? toInputJson(
+                          resolveUsageConditionsAnchors(
+                            reward.usageConditions,
+                            anchorRefMap
+                          )
+                        )
+                      : Prisma.JsonNull,
+                    qualifyConditions: {
+                      set: reward.qualifyConditions.map((qc) => ({ id: resolveId(qc) }))
+                    },
+                    ...rewardDates,
                   }
                 };
+
+                if (reward.value !== undefined) {
+                  rewardUpdateData.data.value = reward.value;
+                }
+
+                return rewardUpdateData;
               })
             }
           }
@@ -543,55 +803,49 @@ export function toPromotionUpdateInput(
 /**
  * Helper para transformar fases nuevas durante un update.
  */
-function transformNewPhaseWithIds(phase: Phase): Prisma.PhaseCreateWithoutPromotionInput {
+function transformNewPhaseWithIds(
+  phaseData: {
+    phase: Phase;
+    phaseId: string;
+    rewardsWithIds: Array<{ reward: Reward; rewardId: string }>;
+  },
+  resolveId: (qc: QualifyCondition) => string,
+  promotionId: string,
+  anchorRefMap: Map<string, string>
+): Prisma.PhaseCreateWithoutPromotionInput {
+    const { phase } = phaseData;
     const phaseDates = mapStatusDates(phase.status, phase.statusDate);
-    const conditionHashToIdMap = new Map<string, string>();
-    // Use strict Prisma type for the array
-    const uniqueConditionsToCreate: Prisma.RewardQualifyConditionCreateWithoutPhaseInput[] = [];
-    const allConditions = phase.rewards.flatMap(r => r.qualifyConditions);
-
-    for (const qc of allConditions) {
-      const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
-      const hash = stringify(qc);
-      if (!conditionHashToIdMap.has(hash)) {
-        const newId = createId();
-        conditionHashToIdMap.set(hash, newId);
-        uniqueConditionsToCreate.push({
-          id: newId,
-          type: qc.type,
-          description: qc.description,
-          status: qc.status || 'PENDING',
-          // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions
-          timeframe: toJson(qc.timeframe),
-          conditions: extractQualifyConditions(qc),
-          ...qcDates,
-        });
-      }
-    }
 
     return {
+      id: phaseData.phaseId,
       name: phase.name,
       description: phase.description,
       status: phase.status || 'NOT_STARTED',
-      activationMethod: phase.activationMethod,
-      timeframe: toJson(phase.timeframe),
-      availableQualifyConditions: { create: uniqueConditionsToCreate },
+      activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
+      timeframe: toInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
       rewards: {
-        create: phase.rewards.map((reward) => {
+        create: phaseData.rewardsWithIds.map((rewardData) => {
+          const { reward } = rewardData;
           const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
           return {
+            id: rewardData.rewardId,
             type: reward.type,
-            value: reward.value,
+            value: requireNumber(reward.value, 'reward.value'),
             valueType: reward.valueType,
-            activationMethod: reward.activationMethod,
-            claimMethod: reward.claimMethod,
+            activationMethod: ActivationMethodSchema.parse(reward.activationMethod),
+            claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
+            activationRestrictions: reward.activationRestrictions,
             claimRestrictions: reward.claimRestrictions,
+            withdrawalRestrictions: reward.withdrawalRestrictions,
             status: reward.status || 'QUALIFYING',
             typeSpecificFields: extractTypeSpecificFields(reward),
-            usageConditions: reward.usageConditions ? toJson(reward.usageConditions) : Prisma.JsonNull,
+            usageConditions: reward.usageConditions
+              ? toInputJson(resolveUsageConditionsAnchors(reward.usageConditions, anchorRefMap))
+              : Prisma.JsonNull,
+            promotion: { connect: { id: promotionId } },
             qualifyConditions: {
               connect: reward.qualifyConditions.map((qc) => ({
-                id: getConditionIdOrThrow(stringify(qc), conditionHashToIdMap)
+                id: resolveId(qc)
               }))
             },
             ...rewardDates,
@@ -608,16 +862,97 @@ function transformNewPhaseWithIds(phase: Phase): Prisma.PhaseCreateWithoutPromot
 // =================================================================
 
 type RewardWithRelations = PrismaReward & {
-  qualifyConditions: PrismaRewardQualifyCondition[];
+  qualifyConditions: Array<
+    PrismaRewardQualifyCondition & {
+      _count?: {
+        rewards: number;
+        deposits: number;
+        bets: number;
+      };
+    }
+  >;
   usageTracking: PrismaRewardUsageTracking | null;
 };
 
 type PhaseWithRelations = PrismaPhase & {
-  availableQualifyConditions: PrismaRewardQualifyCondition[];
   rewards: RewardWithRelations[];
 };
 
-function toQualifyConditionEntity(condition: PrismaRewardQualifyCondition): QualifyConditionEntity {
+function getPromotionLikeStatusDate(status: string, dates: {
+  activatedAt?: Date | null;
+  completedAt?: Date | null;
+  expiredAt?: Date | null;
+  createdAt: Date;
+}): Date {
+  switch (status) {
+    case "ACTIVE":
+      return dates.activatedAt ?? dates.createdAt;
+    case "COMPLETED":
+      return dates.completedAt ?? dates.createdAt;
+    case "EXPIRED":
+      return dates.expiredAt ?? dates.createdAt;
+    default:
+      return dates.createdAt;
+  }
+}
+
+function getRewardStatusDate(status: string, dates: {
+  qualifyConditionsFulfilledAt?: Date | null;
+  claimedAt?: Date | null;
+  receivedAt?: Date | null;
+  useStartedAt?: Date | null;
+  useCompletedAt?: Date | null;
+  expiredAt?: Date | null;
+  createdAt: Date;
+}): Date {
+  switch (status) {
+    case "PENDING_TO_CLAIM":
+      return dates.qualifyConditionsFulfilledAt ?? dates.createdAt;
+    case "CLAIMED":
+      return dates.claimedAt ?? dates.createdAt;
+    case "RECEIVED":
+      return dates.receivedAt ?? dates.createdAt;
+    case "IN_USE":
+      return dates.useStartedAt ?? dates.createdAt;
+    case "USED":
+      return dates.useCompletedAt ?? dates.createdAt;
+    case "EXPIRED":
+      return dates.expiredAt ?? dates.createdAt;
+    default:
+      return dates.createdAt;
+  }
+}
+
+function getQualifyConditionStatusDate(status: string, dates: {
+  startedAt?: Date | null;
+  qualifiedAt?: Date | null;
+  failedAt?: Date | null;
+  expiredAt?: Date | null;
+  createdAt: Date;
+}): Date {
+  switch (status) {
+    case "QUALIFYING":
+      return dates.startedAt ?? dates.createdAt;
+    case "FULFILLED":
+      return dates.qualifiedAt ?? dates.createdAt;
+    case "FAILED":
+      return dates.failedAt ?? dates.createdAt;
+    case "EXPIRED":
+      return dates.expiredAt ?? dates.createdAt;
+    default:
+      return dates.createdAt;
+  }
+}
+
+export function toPromotionQualifyConditionEntity(
+  condition: PrismaRewardQualifyCondition & {
+    _count?: {
+      rewards: number;
+      deposits: number;
+      bets: number;
+    };
+  }
+): QualifyConditionEntity {
   const timeframe = TimeframeSchema.parse(condition.timeframe);
   const status = QualifyConditionStatusSchema.parse(condition.status);
 
@@ -625,12 +960,21 @@ function toQualifyConditionEntity(condition: PrismaRewardQualifyCondition): Qual
     id: condition.id,
     type: condition.type,
     status,
+    statusDate: getQualifyConditionStatusDate(status, {
+      startedAt: condition.startedAt,
+      qualifiedAt: condition.qualifiedAt,
+      failedAt: condition.failedAt,
+      expiredAt: condition.expiredAt,
+      createdAt: condition.createdAt,
+    }),
+    canDelete:
+      (condition._count?.rewards ?? 0) === 0 &&
+      (condition._count?.deposits ?? 0) === 0 &&
+      (condition._count?.bets ?? 0) === 0,
     timeframe,
-    // ❌ contributesToRewardValue eliminado - ahora solo dentro de conditions como discriminador
     balance: condition.balance,
-    phaseId: condition.phaseId,
+    promotionId: condition.promotionId,
     description: condition.description,
-    dependsOnQualifyConditionId: condition.dependsOnQualifyConditionId,
     startedAt: condition.startedAt,
     qualifiedAt: condition.qualifiedAt,
     failedAt: condition.failedAt,
@@ -686,17 +1030,31 @@ function toQualifyConditionEntity(condition: PrismaRewardQualifyCondition): Qual
 
 function toRewardEntity(reward: RewardWithRelations): RewardEntity {
   const status = RewardStatusSchema.parse(reward.status);
-  const qualifyConditions = reward.qualifyConditions.map(toQualifyConditionEntity);
+  const qualifyConditions = reward.qualifyConditions.map(
+    (condition) => toPromotionQualifyConditionEntity(condition)
+  );
 
   const baseFields = {
     id: reward.id,
     type: reward.type,
     value: reward.value,
-    valueType: reward.valueType,
-    activationMethod: reward.activationMethod,
-    claimMethod: reward.claimMethod,
+    valueType: RewardValueTypeSchema.parse(reward.valueType),
+    activationMethod: ActivationMethodSchema.parse(reward.activationMethod),
+    claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
+    activationRestrictions: reward.activationRestrictions,
     claimRestrictions: reward.claimRestrictions,
+    withdrawalRestrictions: reward.withdrawalRestrictions,
     status,
+    statusDate: getRewardStatusDate(status, {
+      qualifyConditionsFulfilledAt: reward.qualifyConditionsFulfilledAt,
+      claimedAt: reward.claimedAt,
+      receivedAt: reward.receivedAt,
+      useStartedAt: reward.useStartedAt,
+      useCompletedAt: reward.useCompletedAt,
+      expiredAt: reward.expiredAt,
+      createdAt: reward.createdAt,
+    }),
+    canDelete: qualifyConditions.length === 0,
     qualifyConditions,
     totalBalance: reward.totalBalance,
     phaseId: reward.phaseId,
@@ -712,49 +1070,113 @@ function toRewardEntity(reward: RewardWithRelations): RewardEntity {
 
   switch (reward.type) {
     case 'FREEBET': {
-      const typeSpecificFields = reward.typeSpecificFields
-        ? FreeBetTypeSpecificFieldsSchema.parse(reward.typeSpecificFields)
-        : { stakeNotReturned: true }; // Default
-      const usageConditions = FreeBetUsageConditionsSchema.parse(reward.usageConditions);
+      const typeSpecificFields = parseTypeSpecificFieldsByRewardType(
+        'FREEBET',
+        reward.typeSpecificFields
+      );
+      const usageConditions = parseUsageConditionsByRewardType(
+        'FREEBET',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? FreeBetUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
       return { ...baseFields, type: 'FREEBET' as const, typeSpecificFields, usageConditions, usageTracking };
     }
     case 'CASHBACK_FREEBET': {
-      const usageConditions = CashbackUsageConditionsSchema.parse(reward.usageConditions);
+      const usageConditions = parseUsageConditionsByRewardType(
+        'CASHBACK_FREEBET',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? CashbackUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
-      return { ...baseFields, type: 'CASHBACK_FREEBET' as const, typeSpecificFields: null, usageConditions, usageTracking };
+      return {
+        ...baseFields,
+        type: 'CASHBACK_FREEBET' as const,
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'CASHBACK_FREEBET',
+          reward.typeSpecificFields
+        ),
+        usageConditions,
+        usageTracking
+      };
     }
     case 'BET_BONUS_ROLLOVER': {
-      const usageConditions = BonusRolloverUsageConditionsSchema.parse(reward.usageConditions);
+      const usageConditions = parseUsageConditionsByRewardType(
+        'BET_BONUS_ROLLOVER',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? BonusRolloverUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
-      return { ...baseFields, type: 'BET_BONUS_ROLLOVER' as const, typeSpecificFields: null, usageConditions, usageTracking };
+      return {
+        ...baseFields,
+        type: 'BET_BONUS_ROLLOVER' as const,
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'BET_BONUS_ROLLOVER',
+          reward.typeSpecificFields
+        ),
+        usageConditions,
+        usageTracking
+      };
     }
     case 'BET_BONUS_NO_ROLLOVER': {
-      const usageConditions = BonusNoRolloverUsageConditionsSchema.parse(reward.usageConditions);
+      const usageConditions = parseUsageConditionsByRewardType(
+        'BET_BONUS_NO_ROLLOVER',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? BonusNoRolloverUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
-      return { ...baseFields, type: 'BET_BONUS_NO_ROLLOVER' as const, typeSpecificFields: null, usageConditions, usageTracking };
+      return {
+        ...baseFields,
+        type: 'BET_BONUS_NO_ROLLOVER' as const,
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'BET_BONUS_NO_ROLLOVER',
+          reward.typeSpecificFields
+        ),
+        usageConditions,
+        usageTracking
+      };
     }
     case 'ENHANCED_ODDS': {
-      const usageConditions = EnhancedOddsUsageConditionsSchema.parse(reward.usageConditions);
+      const usageConditions = parseUsageConditionsByRewardType(
+        'ENHANCED_ODDS',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? EnhancedOddsUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
-      return { ...baseFields, type: 'ENHANCED_ODDS' as const, typeSpecificFields: null, usageConditions, usageTracking };
+      return {
+        ...baseFields,
+        type: 'ENHANCED_ODDS' as const,
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'ENHANCED_ODDS',
+          reward.typeSpecificFields
+        ),
+        usageConditions,
+        usageTracking
+      };
     }
     case 'CASINO_SPINS': {
-      const usageConditions = CasinoSpinsUsageConditionsSchema.parse(reward.usageConditions);
+      const usageConditions = parseUsageConditionsByRewardType(
+        'CASINO_SPINS',
+        reward.usageConditions
+      );
       const usageTracking = reward.usageTracking
         ? CasinoSpinsUsageTrackingSchema.parse(reward.usageTracking)
         : reward.usageTracking;
-      return { ...baseFields, type: 'CASINO_SPINS' as const, typeSpecificFields: null, usageConditions, usageTracking };
+      return {
+        ...baseFields,
+        type: 'CASINO_SPINS' as const,
+        typeSpecificFields: parseTypeSpecificFieldsByRewardType(
+          'CASINO_SPINS',
+          reward.typeSpecificFields
+        ),
+        usageConditions,
+        usageTracking
+      };
     }
     default: {
       // Type-safe error handling
@@ -769,17 +1191,21 @@ function toPhaseEntity(phase: PhaseWithRelations): PhaseEntity {
   const totalBalance = rewardEntities.reduce((sum, reward) => sum + reward.totalBalance, 0);
   const timeframe = TimeframeSchema.parse(phase.timeframe);
   const status = PhaseStatusSchema.parse(phase.status);
-  const availableQualifyConditions = phase.availableQualifyConditions.map(toQualifyConditionEntity);
-
   return {
     id: phase.id,
     name: phase.name,
     description: phase.description ?? '',
     status,
-    activationMethod: phase.activationMethod,
+    statusDate: getPromotionLikeStatusDate(status, {
+      activatedAt: phase.activatedAt,
+      completedAt: phase.completedAt,
+      expiredAt: phase.expiredAt,
+      createdAt: phase.createdAt,
+    }),
+    activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
     timeframe,
-    availableQualifyConditions,
     rewards: rewardEntities,
+    canDelete: rewardEntities.length === 0,
     totalBalance,
     promotionId: phase.promotionId,
     createdAt: phase.createdAt,
@@ -787,47 +1213,43 @@ function toPhaseEntity(phase: PhaseWithRelations): PhaseEntity {
     activatedAt: phase.activatedAt,
     completedAt: phase.completedAt,
     expiredAt: phase.expiredAt,
-  } as PhaseEntity;
-}
-
-interface ToPromotionEntityOptions {
-  /** Include availableTimeframes in the entity. Default: true. Set to false for list views. */
-  includeAvailableTimeframes?: boolean;
+  };
 }
 
 export function toPromotionEntity(
-  promotion: PromotionWithRelations,
-  options: ToPromotionEntityOptions = {}
+  promotion: PromotionWithRelations
 ): PromotionEntity {
-  const { includeAvailableTimeframes = true } = options;
   const phaseEntities = promotion.phases.map(toPhaseEntity);
+  const availableQualifyConditions = promotion.availableQualifyConditions.map((condition) =>
+    toPromotionQualifyConditionEntity(condition)
+  );
   const totalBalance = phaseEntities.reduce((sum, phase) => sum + phase.totalBalance, 0);
-  const timeframe = TimeframeSchema.parse(promotion.timeframe);
   const status = PromotionStatusSchema.parse(promotion.status);
-
-  // Generar dinámicamente las opciones de timeframe (solo si se requiere)
-  const availableTimeframes = includeAvailableTimeframes
-    ? generateAvailableTimeframes(promotion)
-    : undefined;
 
   return {
     id: promotion.id,
     name: promotion.name,
     description: promotion.description ?? '',
-    bookmaker: promotion.bookmaker,
+    bookmaker: BookmakerSchema.parse(promotion.bookmaker),
     status,
-    timeframe,
-    cardinality: promotion.cardinality,
-    activationMethod: promotion.activationMethod,
+    statusDate: getPromotionLikeStatusDate(status, {
+      activatedAt: promotion.activatedAt,
+      completedAt: promotion.completedAt,
+      expiredAt: promotion.expiredAt,
+      createdAt: promotion.createdAt,
+    }),
+    timeframe: AbsoluteTimeframeSchema.parse(promotion.timeframe),
+    cardinality: PromotionCardinalitySchema.parse(promotion.cardinality),
+    activationMethod: ActivationMethodSchema.parse(promotion.activationMethod),
     phases: phaseEntities,
+    availableQualifyConditions,
     totalBalance,
     userId: promotion.userId,
-    // Campo inyectado (DTO) - solo presente en getById, no en list
-    availableTimeframes,
     createdAt: promotion.createdAt,
     updatedAt: promotion.updatedAt,
     activatedAt: promotion.activatedAt,
     completedAt: promotion.completedAt,
     expiredAt: promotion.expiredAt,
-  } as PromotionEntity;
+  };
 }
+

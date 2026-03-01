@@ -25,7 +25,7 @@ export type FieldVisualState = "default" | "warning" | "error";
  * @returns Estado visual: "default" | "warning" | "error"
  */
 export function getFieldVisualState(
-  value: any,
+  value: unknown,
   required: boolean,
   error: FieldError | undefined,
   isSubmitted: boolean

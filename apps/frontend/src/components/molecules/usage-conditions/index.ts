@@ -1,6 +1,6 @@
-export { FreeBetUsageForm } from "./FreeBetUsageForm";
-export { RolloverUsageForm } from "./RolloverUsageForm";
-export { CashbackUsageForm } from "./CashbackUsageForm";
-export { BonusNoRolloverUsageForm } from "./BonusNoRolloverUsageForm";
-export { EnhancedOddsUsageForm } from "./EnhancedOddsUsageForm";
-export { CasinoSpinsUsageForm } from "./CasinoSpinsUsageForm";
+export { FreeBetUsageForm, type FreeBetUsageFormPaths } from "./FreeBetUsageForm";
+export { RolloverUsageForm, type RolloverUsageFormPaths } from "./RolloverUsageForm";
+export { CashbackUsageForm, type CashbackUsageFormPaths } from "./CashbackUsageForm";
+export { BonusNoRolloverUsageForm, type BonusNoRolloverUsageFormPaths } from "./BonusNoRolloverUsageForm";
+export { EnhancedOddsUsageForm, type EnhancedOddsUsageFormPaths } from "./EnhancedOddsUsageForm";
+export { CasinoSpinsUsageForm, type CasinoSpinsUsageFormPaths } from "./CasinoSpinsUsageForm";

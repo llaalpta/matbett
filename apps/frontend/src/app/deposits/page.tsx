@@ -1,10 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { CenteredErrorState } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,39 +13,45 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useTRPC } from "@/lib/trpc";
+import { useDepositsList } from "@/hooks/api/useDeposits";
 
 function DepositList() {
-  const trpc = useTRPC();
-  // Usar queryOptions generado por el proxy tRPC
-  // Sin argumentos porque el router no requiere input obligatorio (userId va en ctx)
-  const { data, isLoading } = useQuery(
-    trpc.deposit.list.queryOptions({
-      pageIndex: 0,
-      pageSize: 20,
-    })
-  );
-
+  const { data, isLoading, isError, error, refetch } = useDepositsList({
+    pageIndex: 0,
+    pageSize: 20,
+  });
   const deposits = data?.data;
 
   if (isLoading) {
-    return <div>Cargando depósitos...</div>;
+    return <div>Cargando depositos...</div>;
+  }
+
+  if (isError) {
+    return (
+      <CenteredErrorState
+        error={error}
+        fallbackMessage="No se pudieron cargar los depositos."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (!deposits || deposits.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <h3 className="mt-2 text-lg font-semibold text-gray-900">
-          No hay depósitos
+          No hay depositos
         </h3>
         <p className="mt-1 text-sm text-gray-500">
-          Comienza registrando tu primer depósito.
+          Comienza registrando tu primer deposito.
         </p>
         <div className="mt-6">
           <Link href="/deposits/new">
             <Button>
               <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-              Nuevo Depósito
+              Nuevo deposito
             </Button>
           </Link>
         </div>
@@ -63,13 +69,13 @@ function DepositList() {
                 {deposit.bookmaker}
               </CardTitle>
               <span className="text-2xl font-bold text-green-600">
-                €{deposit.amount}
+                EUR {deposit.amount}
               </span>
             </div>
             <CardDescription>
               {deposit.promotionContext?.promotionId ? (
                 <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                  Promoción: {deposit.promotionContext.promotionId}
+                  Promocion: {deposit.promotionContext.promotionId}
                 </span>
               ) : (
                 <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
@@ -84,12 +90,12 @@ function DepositList() {
                 <span>Fecha:</span>
                 <span>{new Date(deposit.createdAt).toLocaleDateString()}</span>
               </div>
-              {deposit.code && (
-                <div className="flex justify-between mt-1">
-                  <span>Código:</span>
+              {deposit.code ? (
+                <div className="mt-1 flex justify-between">
+                  <span>Codigo:</span>
                   <span className="font-mono">{deposit.code}</span>
                 </div>
-              )}
+              ) : null}
             </div>
             <div className="mt-4 flex justify-end space-x-2">
               <Link href={`/deposits/${deposit.id}`}>
@@ -115,14 +121,14 @@ export default function DepositsPage() {
     <div className="container mx-auto py-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Depósitos</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Depositos</h1>
           <p className="text-muted-foreground">
             Gestiona tus ingresos en las casas de apuestas.
           </p>
         </div>
         <Link href="/deposits/new">
           <Button>
-            <PlusIcon className="mr-2 h-4 w-4" /> Nuevo Depósito
+            <PlusIcon className="mr-2 h-4 w-4" /> Nuevo deposito
           </Button>
         </Link>
       </div>

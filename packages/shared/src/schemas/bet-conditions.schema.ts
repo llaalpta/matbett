@@ -26,8 +26,8 @@ export const OddsRestrictionSchema = z.object({
  * Restricción de stake (mínimo/máximo)
  */
 export const StakeRestrictionSchema = z.object({
-  minStake: z.number().optional(),
-  maxStake: z.number().optional(),
+  minStake: z.number().int('El stake mínimo debe ser un número entero').min(0).optional(),
+  maxStake: z.number().int('El stake máximo debe ser un número entero').min(0).optional(),
 });
 
 /**
@@ -41,6 +41,15 @@ export const MultipleBetConditionSchema = z.object({
   systemType: z.string().optional(),
 });
 
+/**
+ * Restricciones textuales reutilizables en condiciones de apuesta
+ */
+export const BetTextRestrictionsSchema = z.object({
+  betTypeRestrictions: z.string().optional(),
+  selectionRestrictions: z.string().optional(),
+  otherRestrictions: z.string().optional(),
+});
+
 // =============================================
 // INFERRED TYPES
 // =============================================
@@ -48,6 +57,7 @@ export const MultipleBetConditionSchema = z.object({
 export type OddsRestriction = z.infer<typeof OddsRestrictionSchema>;
 export type StakeRestriction = z.infer<typeof StakeRestrictionSchema>;
 export type MultipleBetCondition = z.infer<typeof MultipleBetConditionSchema>;
+export type BetTextRestrictions = z.infer<typeof BetTextRestrictionsSchema>;
 
 // =============================================
 // RE-EXPORT para compatibilidad

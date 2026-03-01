@@ -1,23 +1,18 @@
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import type { QualifyCondition } from '@matbett/shared';
-
-// Helper para tipos JSON
-function toJson(data: object): Prisma.InputJsonValue {
-  return data as Prisma.InputJsonValue;
-}
+import { toInputJson } from '@/utils/prisma-json';
 
 /**
- * Extrae y valida el objeto de condiciones anidado según el tipo de QualifyCondition.
- * Esta es la única fuente de verdad para extraer condiciones - usada por promotion y reward transformers
+ * Extrae el objeto de condiciones segun el tipo de QualifyCondition.
+ * Se persiste tal cual llega en `conditions`.
  */
 export function extractQualifyConditions(qc: QualifyCondition): Prisma.InputJsonValue {
   switch (qc.type) {
-    case 'DEPOSIT': return toJson(qc.conditions);
-    case 'BET': return toJson(qc.conditions);
-    case 'LOSSES_CASHBACK': return toJson(qc.conditions);
+    case 'DEPOSIT':
+    case 'BET':
+    case 'LOSSES_CASHBACK':
+      return toInputJson(qc.conditions);
     default:
-      // Type-safe error handling for exhaustive checks
-      const _exhaustiveCheck: never = qc;
-      throw new Error(`[Transformer Error] Qualify Condition Type not handled: ${(_exhaustiveCheck as any).type}`);
+      throw new Error('[Transformer Error] Qualify Condition Type not handled');
   }
 }

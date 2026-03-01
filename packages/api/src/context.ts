@@ -1,38 +1,28 @@
-/**
+﻿/**
  * tRPC Context Type Definitions
- *
- * Este archivo define SOLO los tipos del contexto.
- * La implementación real (createContext) está en apps/backend/src/server.ts
- *
- * Separamos tipos de implementación para que el frontend pueda importar
- * los tipos sin arrastrar dependencias del backend (Express, Prisma, etc.)
- *
- * NOTA: Usamos tipos Entity inferidos de Zod desde @matbett/shared.
- * Los tipos Entity incluyen campos de BD (id, timestamps) además de los campos del formulario.
- * Esto permite que tRPC infiera correctamente los outputs de los endpoints.
  */
 
 import type {
+  AnchorCatalog,
+  AnchorOccurrences,
   BookmakerAccount,
   BookmakerAccountEntity,
   BookmakerAccountListInput,
+  Deposit,
+  DeleteDepositResult,
+  DepositEntity,
+  DepositListInput,
+  PaginatedResponse,
   Promotion,
   PromotionEntity,
   PromotionListInput,
-  PaginatedResponse,
-  Deposit,
-  DepositEntity,
-  DepositListInput,
+  QualifyCondition,
+  QualifyConditionEntity,
+  QualifyConditionListInput,
   Reward,
   RewardEntity,
-  AvailableTimeframes,
 } from '@matbett/shared';
 
-/**
- * Interface para el servicio de cuentas de bookmaker
- * INPUTS usan tipos base (sin id, timestamps)
- * OUTPUTS usan tipos Entity (con id, timestamps)
- */
 export interface IBookmakerAccountService {
   list(userId: string, input: BookmakerAccountListInput): Promise<PaginatedResponse<BookmakerAccountEntity>>;
   getById(id: string): Promise<BookmakerAccountEntity>;
@@ -41,54 +31,43 @@ export interface IBookmakerAccountService {
   delete(id: string): Promise<void>;
 }
 
-/**
- * Interface para el servicio de promociones
- * INPUTS usan tipos base (sin id, timestamps) o ListInput con paginación
- * OUTPUTS usan tipos Entity (con id, timestamps) o PaginatedResponse
- */
 export interface IPromotionService {
   list(userId: string, input: PromotionListInput): Promise<PaginatedResponse<PromotionEntity>>;
   getById(id: string): Promise<PromotionEntity | null>;
   create(data: Promotion, userId: string): Promise<PromotionEntity>;
-  update(id: string, data: Partial<Promotion>): Promise<PromotionEntity>;
+  update(id: string, data: Promotion): Promise<PromotionEntity>;
   delete(id: string): Promise<void>;
-  getAvailableTimeframes(promotionId: string): Promise<AvailableTimeframes>;
+  getAnchorCatalog(promotionId: string): Promise<AnchorCatalog>;
+  getAnchorOccurrences(promotionId: string): Promise<AnchorOccurrences>;
+  getAvailableQualifyConditions(promotionId: string): Promise<QualifyConditionEntity[]>;
 }
 
-/**
- * Interface para el servicio de depósitos
- * INPUTS usan tipos base (sin id, timestamps)
- * OUTPUTS usan tipos Entity (con id, timestamps)
- */
 export interface IDepositService {
-  list(userId: string, input: DepositListInput): Promise<PaginatedResponse<DepositEntity>>; // Updated
+  list(userId: string, input: DepositListInput): Promise<PaginatedResponse<DepositEntity>>;
   getById(id: string): Promise<DepositEntity>;
   create(data: Deposit, userId: string): Promise<DepositEntity>;
   update(id: string, data: Partial<Deposit>): Promise<DepositEntity>;
-  delete(id: string): Promise<void>;
+  delete(id: string): Promise<DeleteDepositResult>;
 }
 
-/**
- * Interface para el servicio de recompensas
- * INPUTS usan tipos base (sin id, timestamps)
- * OUTPUTS usan tipos Entity (con id, timestamps)
- */
 export interface IRewardService {
   getById(id: string): Promise<RewardEntity | null>;
-  create(data: Reward, phaseId: string): Promise<RewardEntity>;
-  update(id: string, data: Partial<Reward>): Promise<RewardEntity>;
+  update(id: string, data: Reward): Promise<RewardEntity>;
   delete(id: string): Promise<void>;
 }
 
-/**
- * Contexto de tRPC con servicios inyectados
- *
- * Este contexto estará disponible en todos los procedures vía { ctx }
- */
+export interface IQualifyConditionService {
+  list(userId: string, input: QualifyConditionListInput): Promise<PaginatedResponse<QualifyConditionEntity>>;
+  getById(id: string, userId: string): Promise<QualifyConditionEntity | null>;
+  update(id: string, data: QualifyCondition, userId: string): Promise<QualifyConditionEntity>;
+  delete(id: string, userId: string): Promise<void>;
+}
+
 export interface Context {
   userId: string;
   bookmakerAccountService: IBookmakerAccountService;
   promotionService: IPromotionService;
   depositService: IDepositService;
-  rewardService: IRewardService; // Añadir el servicio de recompensa
+  rewardService: IRewardService;
+  qualifyConditionService: IQualifyConditionService;
 }

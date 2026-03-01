@@ -30,6 +30,26 @@ export const requiredNumber = (
 
   return schema
     .optional()
-    .refine((val) => val !== undefined, { message })
-    .transform((val) => val as number);
+    .refine((val): val is number => val !== undefined, { message })
+    .transform((val) => val);
+};
+
+/**
+ * Campo numérico entero requerido.
+ * Permite undefined en formulario y exige valor entero al validar.
+ */
+export const requiredInteger = (
+  min?: number,
+  message = "Este campo es obligatorio"
+) => {
+  let schema = z.number().int("Debe ser un número entero");
+
+  if (min !== undefined) {
+    schema = schema.min(min);
+  }
+
+  return schema
+    .optional()
+    .refine((val): val is number => val !== undefined, { message })
+    .transform((val) => val);
 };
