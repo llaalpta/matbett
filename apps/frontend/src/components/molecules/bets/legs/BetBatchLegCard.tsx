@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  betStatusOptions,
-} from "@matbett/shared";
+import { betStatusOptions } from "@matbett/shared";
 
 import { DateTimeField, InputField, SelectField } from "@/components/atoms";
-import { BetBatchParticipationsSection } from "@/components/molecules/bets/BetBatchParticipationsSection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBetLegCardLogic } from "@/hooks/domain/bets/useBetLegCardLogic";
 import type { BetBatchFormValues } from "@/hooks/useBetBatchForm";
+import { getBetOperationBetSummary } from "@/utils/bets";
 
 import type { BookmakerAccountLike } from "../types";
 
@@ -29,6 +27,8 @@ export function BetBatchLegCard({
 }: BetBatchLegCardProps) {
   const {
     leg,
+    operation,
+    strategy,
     bookmakerOptions,
     isSingleMatchedLayout,
     isMainLeg,
@@ -50,15 +50,22 @@ export function BetBatchLegCard({
     return null;
   }
 
+  const roleSummary = getBetOperationBetSummary({
+    index: legIndex,
+    operation,
+    role: leg.legRole,
+    strategy,
+  });
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          Leg {legIndex + 1}
-          {leg.legRole ? ` · ${leg.legRole}` : ""}
-        </CardTitle>
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b bg-muted/20 px-4 py-3">
+        <CardTitle className="text-sm">{roleSummary.label}</CardTitle>
+        <p className="text-muted-foreground text-xs">
+          {roleSummary.description}
+        </p>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 p-4">
         {isSingleMatchedLayout ? (
           <SingleMatchedLegConfiguration
             legIndex={legIndex}
@@ -69,7 +76,7 @@ export function BetBatchLegCard({
           />
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SelectField<BetBatchFormValues>
                 name={`legs.${legIndex}.bookmakerAccountId`}
                 label="Cuenta"
@@ -127,10 +134,12 @@ export function BetBatchLegCard({
               />
             </div>
 
-            <DateTimeField<BetBatchFormValues>
-              name={`legs.${legIndex}.placedAt`}
-              label="Fecha de colocación"
-            />
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <DateTimeField<BetBatchFormValues>
+                name={`legs.${legIndex}.placedAt`}
+                label="Fecha de colocación"
+              />
+            </div>
           </>
         )}
 
@@ -145,7 +154,6 @@ export function BetBatchLegCard({
         {!hideGenericSelections ? (
           <BetBatchSelectionsSection legIndex={legIndex} />
         ) : null}
-        <BetBatchParticipationsSection legIndex={legIndex} />
       </CardContent>
     </Card>
   );

@@ -3,6 +3,7 @@
 import { betStatusOptions } from "@matbett/shared";
 
 import { DateTimeField, InputField, SelectField } from "@/components/atoms";
+import { Badge } from "@/components/ui/badge";
 import type { BetBatchFormValues } from "@/hooks/useBetBatchForm";
 
 import type { BatchEventFormValue } from "../types";
@@ -40,59 +41,33 @@ export function SingleMatchedLegConfiguration({
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {isMainLeg ? (
-          <>
-            <InputField<BetBatchFormValues>
-              name="events.0.eventName"
-              label="Evento"
-              required
-            />
-            <DateTimeField<BetBatchFormValues>
-              name="events.0.eventDate"
-              label="Fecha del evento"
-              required
-            />
-          </>
-        ) : (
-          <>
-            <StaticSummaryField
-              label="Evento"
-              value={sharedEvent?.eventName || "Sin evento"}
-            />
-            <StaticSummaryField
-              label="Fecha del evento"
-              value={formatEventDateSummary(sharedEvent?.eventDate)}
-            />
-          </>
-        )}
+      <div className="rounded-md border bg-muted/10 p-3 text-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Badge variant="outline">E1</Badge>
+          <span className="font-medium">
+            {sharedEvent?.eventName || "Evento pendiente"}
+          </span>
+          <span className="text-muted-foreground">
+            {sharedEvent?.marketName ? `· ${sharedEvent.marketName}` : null}
+          </span>
+        </div>
+        <div className="text-muted-foreground">
+          Fecha del evento: {formatEventDateSummary(sharedEvent?.eventDate)}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {isMainLeg ? (
-          <>
-            <InputField<BetBatchFormValues>
-              name="events.0.marketName"
-              label="Mercado"
-              required
-            />
-            <InputField<BetBatchFormValues>
-              name={`legs.${legIndex}.selections.0.selection`}
-              label="Selección"
-              required
-            />
-          </>
+          <InputField<BetBatchFormValues>
+            name={`legs.${legIndex}.selections.0.selection`}
+            label="Selección"
+            required
+          />
         ) : (
-          <>
-            <StaticSummaryField
-              label="Mercado"
-              value={sharedEvent?.marketName || "Sin mercado"}
-            />
-            <StaticSummaryField
-              label="Selección"
-              value={derivedHedge1Selection || "Se deriva desde MAIN"}
-            />
-          </>
+          <StaticSummaryField
+            label="Selección"
+            value={derivedHedge1Selection || "Se deriva desde la apuesta principal"}
+          />
         )}
       </div>
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 
 import type { PromotionFormData, PromotionServerModel } from "@/types/hooks";
-import { buildDefaultPromotion } from "@/utils/formDefaults";
+import { buildBoundedTimeframe, buildDefaultPromotion } from "@/utils/formDefaults";
 
 export const normalizePromotionSubmitData = (
   data: PromotionFormData
@@ -20,7 +20,7 @@ export const normalizePromotionSubmitData = (
     description: data.description || "",
     status: data.status,
     statusDate: data.statusDate,
-    timeframe: data.timeframe,
+    timeframe: buildBoundedTimeframe(data.timeframe),
     activationMethod: data.activationMethod || "AUTOMATIC",
   };
 

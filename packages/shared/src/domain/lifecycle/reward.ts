@@ -125,21 +125,21 @@ function buildRewardStatusOptionReasons(
         reasons.push({
           code: 'promotion_not_open',
           message:
-            'La promotion padre debe estar en un estado abierto para volver la reward a Calificando.',
+            'La promoción padre debe estar en un estado abierto para volver la recompensa a Calificando.',
         });
       }
       if (!isStructureOpenPhaseStatus(input.phaseStatus)) {
         reasons.push({
           code: 'phase_not_open',
           message:
-            'La phase padre debe estar en un estado abierto para volver la reward a Calificando.',
+            'La fase padre debe estar en un estado abierto para volver la recompensa a Calificando.',
         });
       }
       if (!allQualifyConditionsOpen) {
         reasons.push({
           code: 'qualify_conditions_not_open',
           message:
-            'Todas las qualify conditions deben estar Pendiente o Calificando para volver la reward a Calificando.',
+            'Todas las condiciones de calificación deben estar Pendiente o Calificando para volver la recompensa a Calificando.',
         });
       }
       break;
@@ -149,14 +149,14 @@ function buildRewardStatusOptionReasons(
         reasons.push({
           code: 'qualify_conditions_not_fulfilled',
           message:
-            'Todas las qualify conditions deben estar Cumplidas para avanzar este estado de la reward.',
+            'Todas las condiciones de calificación deben estar Cumplidas para avanzar este estado de la recompensa.',
         });
       }
       if (!manualClaimMethods.has((input.claimMethod ?? '') as ClaimMethod)) {
         reasons.push({
           code: 'manual_claim_required',
           message:
-            'Este estado solo está disponible para rewards con método de reclamación manual.',
+            'Este estado solo está disponible para recompensas con método de reclamación manual.',
         });
       }
       break;
@@ -167,7 +167,7 @@ function buildRewardStatusOptionReasons(
         reasons.push({
           code: 'qualify_conditions_not_fulfilled',
           message:
-            'Todas las qualify conditions deben estar Cumplidas para avanzar este estado de la reward.',
+            'Todas las condiciones de calificación deben estar Cumplidas para avanzar este estado de la recompensa.',
         });
       }
       break;
@@ -190,7 +190,7 @@ function buildRewardWarnings(input: RewardLifecyclePolicyInput): LifecycleWarnin
     warnings.push({
       code: 'child_qc_failed',
       message:
-        'Hay qualify conditions en estado Fallida; revisa si la reward debe seguir en su estado actual.',
+        'Hay condiciones de calificación en estado Fallida; revisa si la recompensa debe seguir en su estado actual.',
     });
   }
 
@@ -198,7 +198,7 @@ function buildRewardWarnings(input: RewardLifecyclePolicyInput): LifecycleWarnin
     warnings.push({
       code: 'child_qc_expired',
       message:
-        'Hay qualify conditions en estado Expirada; revisa si la reward debe seguir en su estado actual.',
+        'Hay condiciones de calificación en estado Expirada; revisa si la recompensa debe seguir en su estado actual.',
     });
   }
 
@@ -206,7 +206,7 @@ function buildRewardWarnings(input: RewardLifecyclePolicyInput): LifecycleWarnin
     warnings.push({
       code: 'outside_usage_timeframe',
       message:
-        'La reward está fuera de su periodo de uso, pero su estado sigue abierto. Revisa si debes actualizar manualmente el estado.',
+        'La recompensa está fuera de su periodo de uso, pero su estado sigue abierto. Revisa si debes actualizar manualmente el estado.',
     });
   }
 
@@ -214,7 +214,7 @@ function buildRewardWarnings(input: RewardLifecyclePolicyInput): LifecycleWarnin
     warnings.push({
       code: 'usage_before_start',
       message:
-        'La reward figura En uso antes del inicio de su periodo de uso. Revisa si debes actualizar manualmente el estado.',
+        'La recompensa figura En uso antes del inicio de su periodo de uso. Revisa si debes actualizar manualmente el estado.',
     });
   }
 
@@ -231,7 +231,7 @@ export function getRewardLifecyclePolicy(
       structureReasons.push({
         code: 'promotion_not_open',
         message:
-          'La promotion ya no está en una fase editable; la configuración de la reward queda bloqueada.',
+          'La promoción ya no está en una fase editable; la configuración de la recompensa queda bloqueada.',
       });
     }
 
@@ -239,7 +239,7 @@ export function getRewardLifecyclePolicy(
       structureReasons.push({
         code: 'phase_not_open',
         message:
-          'La phase ya no está en un estado editable; la configuración de la reward queda bloqueada.',
+          'La fase ya no está en un estado editable; la configuración de la recompensa queda bloqueada.',
       });
     }
 
@@ -247,7 +247,7 @@ export function getRewardLifecyclePolicy(
       structureReasons.push({
         code: 'reward_not_qualifying',
         message:
-          'La configuración solo se puede editar mientras la reward está en estado Calificando.',
+          'La configuración solo se puede editar mientras la recompensa está en estado Calificando.',
       });
     }
   }
@@ -272,7 +272,7 @@ export function getRewardLifecyclePolicy(
       betEntryReasons.push({
         code: 'reward_not_persisted',
         message:
-          'Guarda la reward primero para poder usarla en el registro contextual.',
+          'Guarda la recompensa primero para poder usarla en el registro contextual.',
       });
     }
 
@@ -280,7 +280,7 @@ export function getRewardLifecyclePolicy(
       betEntryReasons.push({
         code: 'reward_not_usable_in_bet',
         message:
-          'La reward solo se puede usar en apuestas cuando está Recibida o En uso.',
+          'La recompensa solo se puede usar en apuestas cuando está Recibida o En uso.',
       });
     }
   }

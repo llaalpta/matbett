@@ -59,6 +59,10 @@ function hasOpenPhases(phases: PromotionLifecyclePolicyInput['phases']) {
   );
 }
 
+function hasAnyReward(phases: PromotionLifecyclePolicyInput['phases']) {
+  return (phases ?? []).some((phase) => (phase.rewards ?? []).length > 0);
+}
+
 function isPromotionTreeInitial(phases: PromotionLifecyclePolicyInput['phases']) {
   return (phases ?? []).every(
     (phase) =>
@@ -76,6 +80,15 @@ function buildPromotionStatusOptionReasons(
   input: PromotionLifecyclePolicyInput,
 ): LifecycleReason[] {
   const reasons: LifecycleReason[] = [];
+  const containsReward = hasAnyReward(input.phases);
+
+  if (status !== 'NOT_STARTED' && !containsReward) {
+    reasons.push({
+      code: 'no_rewards',
+      message:
+        'La promotion sin rewards solo puede permanecer en estado No iniciada.',
+    });
+  }
 
   switch (status) {
     case 'NOT_STARTED':

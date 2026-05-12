@@ -1,7 +1,7 @@
 import {
   PromotionSchema,
   RewardSchema,
-  type AbsoluteTimeframe,
+  type BoundedAbsoluteTimeframe,
   type QualifyConditionType,
 } from "@matbett/shared";
 
@@ -36,13 +36,26 @@ const addDays = (date: Date, days: number): Date => {
   return nextDate;
 };
 
-const buildAbsoluteTimeframeFrom = (start = new Date()): AbsoluteTimeframe => ({
+const coerceDate = (value: unknown, fallback = new Date()): Date => {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+  }
+
+  return fallback;
+};
+
+const buildAbsoluteTimeframeFrom = (start = new Date()): BoundedAbsoluteTimeframe => ({
   mode: "ABSOLUTE",
   start,
   end: addDays(start, 7),
 });
 
-export const DEFAULT_ABSOLUTE_TIMEFRAME: AbsoluteTimeframe =
+export const DEFAULT_ABSOLUTE_TIMEFRAME: BoundedAbsoluteTimeframe =
   buildAbsoluteTimeframeFrom();
 
 // =============================================
@@ -109,8 +122,29 @@ export const buildDefaultPromotion = (
   }
 };
 
-export const buildDefaultAbsoluteTimeframe = (): AbsoluteTimeframe =>
+export const buildDefaultAbsoluteTimeframe = (): BoundedAbsoluteTimeframe =>
   buildAbsoluteTimeframeFrom();
+
+export const buildBoundedTimeframe = (
+  timeframe?: PromotionFormData["timeframe"] | PhaseFormData["timeframe"]
+): PhaseFormData["timeframe"] => {
+  if (!timeframe) {
+    return buildDefaultAbsoluteTimeframe();
+  }
+
+  if (timeframe.mode !== "ABSOLUTE") {
+    return timeframe as PhaseFormData["timeframe"];
+  }
+
+  const start = coerceDate(timeframe.start);
+  const end = timeframe.end ? coerceDate(timeframe.end, addDays(start, 7)) : addDays(start, 7);
+
+  return {
+    mode: "ABSOLUTE",
+    start,
+    end,
+  };
+};
 
 export const buildDefaultPhases = (
   phasesData?: PhaseServerModel[]
@@ -130,7 +164,7 @@ export const buildDefaultPhase = (
   description: phaseData?.description || "",
   status: phaseData?.status || "NOT_STARTED",
   statusDate: phaseData?.statusDate ?? new Date(),
-  timeframe: phaseData?.timeframe || buildDefaultAbsoluteTimeframe(),
+  timeframe: buildBoundedTimeframe(phaseData?.timeframe),
   activationMethod: phaseData?.activationMethod || "AUTOMATIC",
   rewards: buildDefaultRewards(phaseData?.rewards),
 });
@@ -139,7 +173,7 @@ export const buildDefaultRewards = (
   rewardsData?: RewardServerModel[]
 ): RewardFormData[] => {
   if (!rewardsData || rewardsData.length === 0) {
-    return [buildDefaultReward("FREEBET")];
+    return [];
   }
   return rewardsData.map((reward) => buildDefaultReward(reward.type, reward));
 };
@@ -233,7 +267,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: addDays(new Date(), 7),
-          } satisfies AbsoluteTimeframe,
+          } satisfies BoundedAbsoluteTimeframe,
           // Comportamiento de uso
           mustUseComplete: true,
           voidConsumesBalance: true,
@@ -259,7 +293,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: addDays(new Date(), 7),
-          } satisfies AbsoluteTimeframe,
+          } satisfies BoundedAbsoluteTimeframe,
           // Restricciones de apuesta (con stake y outcome)
           ...buildDefaultRolloverBetRestrictions(),
         },
@@ -276,7 +310,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: addDays(new Date(), 7),
-          } satisfies AbsoluteTimeframe,
+          } satisfies BoundedAbsoluteTimeframe,
           // Configuración del rollover
           multiplier: 1,
           maxConversionMultiplier: undefined,
@@ -310,7 +344,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: addDays(new Date(), 7),
-          } satisfies AbsoluteTimeframe,
+          } satisfies BoundedAbsoluteTimeframe,
           maxConversionMultiplier: undefined,
           maxConvertibleAmount: undefined,
           // Reglas de computo/validez
@@ -374,7 +408,7 @@ export const buildDefaultReward = (
             mode: "ABSOLUTE",
             start: new Date(),
             end: addDays(new Date(), 7),
-          } satisfies AbsoluteTimeframe,
+          } satisfies BoundedAbsoluteTimeframe,
           spinsCount: 1,
           gameTitle: undefined,
           // Sin restricciones de apuesta (no aplica a casino)
@@ -382,7 +416,7 @@ export const buildDefaultReward = (
       });
 
     default:
-      throw new Error(`Tipo de reward no soportado: ${type}`);
+      throw new Error(`Tipo de recompensa no soportado: ${type}`);
   }
 };
 
@@ -453,7 +487,7 @@ export function buildDefaultQualifyCondition(
         mode: "ABSOLUTE",
         start: new Date(),
         end: addDays(new Date(), 7),
-      } satisfies AbsoluteTimeframe),
+      } satisfies BoundedAbsoluteTimeframe),
 
     // Campos calculados: NO se cargan, quedan undefined
     // depositRecordIds, betRecordIds, generatedRewardIds se omiten
@@ -628,7 +662,7 @@ export function buildDefaultQualifyCondition(
     }
 
     default:
-      throw new Error(`Tipo de qualify condition no soportado: ${type}`);
+      throw new Error(`Tipo de condición no soportado: ${type}`);
   }
 }
 

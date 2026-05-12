@@ -83,7 +83,7 @@ export function getQualifyConditionParentSummary(condition: QualifyConditionEnti
 
   if (!primaryReward) {
     return {
-      primary: `${condition.promotionName ?? "Promoción"} · Sin reward asociada`,
+      primary: `${condition.promotionName ?? "Promoción"} · Sin recompensa asociada`,
       secondary: undefined,
     };
   }

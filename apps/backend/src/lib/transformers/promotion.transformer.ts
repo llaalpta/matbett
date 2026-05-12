@@ -25,7 +25,7 @@ import type {
   UsageConditions,
 } from '@matbett/shared';
 import {
-  TimeframeSchema,
+  BoundedTimeframeSchema,
   AbsoluteTimeframeSchema,
   promotionAnchorEventOptions,
   phaseAnchorEventOptions,
@@ -119,10 +119,10 @@ const registerAnchorRef = (
   }
 };
 
-const resolveTimeframeAnchors = (
-  timeframe: Timeframe,
+const resolveTimeframeAnchors = <TTimeframe extends Timeframe>(
+  timeframe: TTimeframe,
   refMap: Map<string, string>
-): Timeframe => {
+): TTimeframe => {
   if (timeframe.mode !== 'RELATIVE') {
     return timeframe;
   }
@@ -151,7 +151,18 @@ const resolveTimeframeAnchors = (
       entityRefType: persistedRefType,
       entityRef: resolvedRef,
     },
-  };
+  } as TTimeframe;
+};
+
+const timeframeToInputJson = (timeframe: Timeframe): Prisma.InputJsonValue => {
+  if (timeframe.mode === 'ABSOLUTE' && !timeframe.end) {
+    return toInputJson({
+      mode: timeframe.mode,
+      start: timeframe.start,
+    });
+  }
+
+  return toInputJson(timeframe);
 };
 
 const resolveUsageConditionsAnchors = (
@@ -486,7 +497,7 @@ export function toPromotionCreateInput(
       type: qc.type,
       description: qc.description,
       status: qc.status || 'PENDING',
-      timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
+      timeframe: timeframeToInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
       conditions: extractQualifyConditions(qc),
       ...qcDates,
     });
@@ -513,7 +524,7 @@ export function toPromotionCreateInput(
     bookmaker: bookmakerAccount.bookmaker,
     bookmakerAccount: { connect: { id: bookmakerAccount.id } },
     status: promotion.status || 'NOT_STARTED',
-    timeframe: toInputJson(resolveTimeframeAnchors(promotion.timeframe, anchorRefMap)),
+    timeframe: timeframeToInputJson(resolveTimeframeAnchors(promotion.timeframe, anchorRefMap)),
     cardinality: promotion.cardinality,
     activationMethod: promotion.activationMethod || 'AUTOMATIC',
     user: { connect: { id: userId } },
@@ -561,7 +572,7 @@ export function toPromotionCreateInput(
           description: phase.description,
           status: phase.status || 'NOT_STARTED',
           activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
-          timeframe: toInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
+          timeframe: timeframeToInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
           rewards: { create: rewardsCreatePayload },
           // Mapeo de fechas de estado de fase
           ...phaseDates,
@@ -588,7 +599,7 @@ export function toPromotionUpdateInput(
   }
   if (data.status !== undefined) {updateInput.status = data.status;}
   if (data.timeframe !== undefined) {
-    updateInput.timeframe = toInputJson(
+    updateInput.timeframe = timeframeToInputJson(
       resolveTimeframeAnchors(data.timeframe, anchorRefMap)
     );
   }
@@ -636,75 +647,11 @@ export function toPromotionUpdateInput(
     );
     const activePhaseIds = existingPhases.map((phaseData) => phaseData.phaseId);
 
-    const rewardConditions = phasesWithIds.flatMap((phaseData) =>
-      phaseData.rewardsWithIds.flatMap((rewardData) => rewardData.reward.qualifyConditions)
-    );
-    const poolConditions = data.availableQualifyConditions ?? [];
-    const allConditions = [...poolConditions, ...rewardConditions];
-    const conditionMap = new Map<string, string>();
-    const newConditions: QualifyCondition[] = [];
-
-    for (const qc of allConditions) {
-      const key = getConditionKey(qc);
-      if (conditionMap.has(key)) {continue;}
-      if (qc.id) {
-        conditionMap.set(key, qc.id);
-        registerAnchorRef(anchorRefMap, 'QUALIFY_CONDITION', qc.id, qc.clientId);
-      } else {
-        const newId = createId();
-        conditionMap.set(key, newId);
-        registerAnchorRef(anchorRefMap, 'QUALIFY_CONDITION', newId, qc.clientId);
-        newConditions.push(qc);
-      }
-    }
-
-    const resolveId = (qc: QualifyCondition): string =>
-      getConditionIdOrThrow(getConditionKey(qc), conditionMap);
-
-    const activeConditionIds = allConditions
-      .filter((qc): qc is QualifyCondition & { id: string } => Boolean(qc.id))
-      .map((qc) => qc.id);
-
-    updateInput.availableQualifyConditions = {
-      deleteMany: { id: { notIn: activeConditionIds } },
-      create: newConditions.map((qc) => {
-        const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
-        const generatedId = resolveId(qc);
-        return {
-          id: generatedId,
-          type: qc.type,
-          description: qc.description,
-          status: qc.status || 'PENDING',
-          timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
-          conditions: extractQualifyConditions(qc),
-          ...qcDates,
-        };
-      }),
-      update: allConditions
-        .filter((qc): qc is QualifyCondition & { id: string } => Boolean(qc.id))
-        .map((qc) => {
-        const qcDates = mapQualifyConditionStatusDates(qc.status, qc.statusDate);
-        return {
-          where: { id: qc.id },
-          data: {
-            type: qc.type,
-            description: qc.description,
-            status: qc.status,
-            timeframe: toInputJson(resolveTimeframeAnchors(qc.timeframe, anchorRefMap)),
-            conditions: extractQualifyConditions(qc),
-            ...qcDates,
-          }
-        };
-      })
-    };
-
     updateInput.phases = {
       deleteMany: { id: { notIn: activePhaseIds } },
       create: newPhases.map((phaseData) =>
         transformNewPhaseWithIds(
           phaseData,
-          resolveId,
-          promotionId,
           anchorRefMap
         )
       ),
@@ -720,92 +667,11 @@ export function toPromotionUpdateInput(
             description: phase.description,
             status: phase.status,
             activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
-            timeframe: toInputJson(
+            timeframe: timeframeToInputJson(
               resolveTimeframeAnchors(phase.timeframe, anchorRefMap)
             ),
             ...phaseDates,
 
-            rewards: {
-              deleteMany: {
-                id: {
-                  notIn: phaseData.rewardsWithIds
-                    .filter((rewardData) => Boolean(rewardData.reward.id))
-                    .map((rewardData) => rewardData.rewardId),
-                },
-              },
-
-              create: phaseData.rewardsWithIds
-                .filter((rewardData) => !rewardData.reward.id)
-                .map((rewardData) => {
-                const reward = rewardData.reward;
-                const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
-                return {
-                  id: rewardData.rewardId,
-                  type: reward.type,
-                  value: requireNumber(reward.value, 'reward.value'),
-                  valueType: reward.valueType,
-                  activationMethod: reward.activationMethod,
-                  claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
-                  activationRestrictions: reward.activationRestrictions,
-                  claimRestrictions: reward.claimRestrictions,
-                  withdrawalRestrictions: reward.withdrawalRestrictions,
-                  status: reward.status || 'QUALIFYING',
-                  typeSpecificFields: extractTypeSpecificFields(reward),
-                  usageConditions: reward.usageConditions
-                    ? toInputJson(
-                        resolveUsageConditionsAnchors(
-                          reward.usageConditions,
-                          anchorRefMap
-                        )
-                      )
-                    : Prisma.JsonNull,
-                  promotion: { connect: { id: promotionId } },
-                  qualifyConditions: {
-                    connect: reward.qualifyConditions.map((qc) => ({ id: resolveId(qc) }))
-                  },
-                  ...rewardDates,
-                };
-              }),
-
-              update: phaseData.rewardsWithIds
-                .filter((rewardData) => Boolean(rewardData.reward.id))
-                .map((rewardData) => {
-                const reward = rewardData.reward;
-                const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
-                const rewardUpdateData: Prisma.RewardUpdateWithWhereUniqueWithoutPhaseInput = {
-                  where: { id: rewardData.rewardId },
-                  data: {
-                    type: reward.type,
-                    valueType: reward.valueType,
-                    activationMethod: reward.activationMethod,
-                    claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
-                    activationRestrictions: reward.activationRestrictions,
-                    claimRestrictions: reward.claimRestrictions,
-                    withdrawalRestrictions: reward.withdrawalRestrictions,
-                    status: reward.status,
-                    typeSpecificFields: extractTypeSpecificFields(reward),
-                    usageConditions: reward.usageConditions
-                      ? toInputJson(
-                          resolveUsageConditionsAnchors(
-                            reward.usageConditions,
-                            anchorRefMap
-                          )
-                        )
-                      : Prisma.JsonNull,
-                    qualifyConditions: {
-                      set: reward.qualifyConditions.map((qc) => ({ id: resolveId(qc) }))
-                    },
-                    ...rewardDates,
-                  }
-                };
-
-                if (reward.value !== undefined) {
-                  rewardUpdateData.data.value = reward.value;
-                }
-
-                return rewardUpdateData;
-              })
-            }
           }
         };
       })
@@ -821,10 +687,7 @@ function transformNewPhaseWithIds(
   phaseData: {
     phase: Phase;
     phaseId: string;
-    rewardsWithIds: Array<{ reward: Reward; rewardId: string }>;
   },
-  resolveId: (qc: QualifyCondition) => string,
-  promotionId: string,
   anchorRefMap: Map<string, string>
 ): Prisma.PhaseCreateWithoutPromotionInput {
     const { phase } = phaseData;
@@ -836,36 +699,7 @@ function transformNewPhaseWithIds(
       description: phase.description,
       status: phase.status || 'NOT_STARTED',
       activationMethod: ActivationMethodSchema.parse(phase.activationMethod),
-      timeframe: toInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
-      rewards: {
-        create: phaseData.rewardsWithIds.map((rewardData) => {
-          const { reward } = rewardData;
-          const rewardDates = mapRewardStatusDates(reward.status, reward.statusDate);
-          return {
-            id: rewardData.rewardId,
-            type: reward.type,
-            value: requireNumber(reward.value, 'reward.value'),
-            valueType: reward.valueType,
-            activationMethod: ActivationMethodSchema.parse(reward.activationMethod),
-            claimMethod: ClaimMethodSchema.parse(reward.claimMethod),
-            activationRestrictions: reward.activationRestrictions,
-            claimRestrictions: reward.claimRestrictions,
-            withdrawalRestrictions: reward.withdrawalRestrictions,
-            status: reward.status || 'QUALIFYING',
-            typeSpecificFields: extractTypeSpecificFields(reward),
-            usageConditions: reward.usageConditions
-              ? toInputJson(resolveUsageConditionsAnchors(reward.usageConditions, anchorRefMap))
-              : Prisma.JsonNull,
-            promotion: { connect: { id: promotionId } },
-            qualifyConditions: {
-              connect: reward.qualifyConditions.map((qc) => ({
-                id: resolveId(qc)
-              }))
-            },
-            ...rewardDates,
-          };
-        })
-      },
+      timeframe: timeframeToInputJson(resolveTimeframeAnchors(phase.timeframe, anchorRefMap)),
       ...phaseDates,
     };
 }
@@ -994,7 +828,7 @@ function getQualifyConditionStatusDate(status: string, dates: {
 export function toPromotionQualifyConditionEntity(
   condition: PromotionQualifyConditionWithCounts
 ): QualifyConditionEntity {
-  const timeframe = TimeframeSchema.parse(condition.timeframe);
+  const timeframe = BoundedTimeframeSchema.parse(condition.timeframe);
   const status = QualifyConditionStatusSchema.parse(condition.status);
 
   const baseFields = {
@@ -1256,7 +1090,7 @@ function toRewardEntity(reward: RewardWithRelations): RewardEntity {
 function toPhaseEntity(phase: PhaseWithRelations): PhaseEntity {
   const rewardEntities = phase.rewards.map(toRewardEntity);
   const totalBalance = rewardEntities.reduce((sum, reward) => sum + reward.totalBalance, 0);
-  const timeframe = TimeframeSchema.parse(phase.timeframe);
+  const timeframe = BoundedTimeframeSchema.parse(phase.timeframe);
   const status = PhaseStatusSchema.parse(phase.status);
   return {
     id: phase.id,

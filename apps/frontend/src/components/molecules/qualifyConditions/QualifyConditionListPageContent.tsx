@@ -130,7 +130,7 @@ function QualifyConditionTrackingPanel({
     if (deposits.length === 0) {
       return (
         <div className="text-muted-foreground px-1 py-1 text-[13px]">
-          No hay depósitos registrados para esta qualify condition.
+          No hay depósitos registrados para esta condición.
         </div>
       );
     }
@@ -156,7 +156,7 @@ function QualifyConditionTrackingPanel({
   if (bets.length === 0) {
     return (
       <div className="text-muted-foreground px-1 py-1 text-[13px]">
-        No hay apuestas registradas para esta qualify condition.
+        No hay apuestas registradas para esta condición.
       </div>
     );
   }
@@ -242,8 +242,8 @@ function QualifyConditionActions({
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0"
-              title="Abrir reward"
-              aria-label="Abrir reward"
+              title="Abrir recompensa"
+              aria-label="Abrir recompensa"
             >
               <Rows3 className="h-4 w-4" />
             </Button>
@@ -309,7 +309,7 @@ function QualifyConditionActions({
           onClose={() => {
             setIsDepositModalOpen(false);
           }}
-          title="Registrar depósito para qualify condition"
+          title="Registrar depósito para condición"
           context={depositContext}
           qualifyCondition={depositConditionForModal}
         />
@@ -446,7 +446,7 @@ export default function QualifyConditionListPageContent() {
       },
       {
         id: "parent",
-        header: "Promoción / reward",
+        header: "Promoción / recompensa",
         cell: ({ row }) => {
           const summary = getQualifyConditionParentSummary(row.original);
 
@@ -546,7 +546,7 @@ export default function QualifyConditionListPageContent() {
       <PageHeader
         eyebrow="Promociones"
         title="Condiciones de calificación"
-        description="Vista operativa para decidir rápido si una condición requiere tracking, revisión o navegación a su reward."
+        description="Vista operativa para decidir rápido si una condición requiere tracking, revisión o navegación a su recompensa."
         actions={
           <Link href="/promotions">
             <Button variant="outline">
@@ -594,7 +594,7 @@ export default function QualifyConditionListPageContent() {
                 <Input
                   id="qualifyConditionSearch"
                   name="qualifyConditionSearch"
-                  placeholder="Promoción, reward o descripción"
+                  placeholder="Promoción, recompensa o descripción"
                   value={filters.globalFilter}
                   onChange={(event) => {
                     setFilters((current) => ({

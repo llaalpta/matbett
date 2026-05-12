@@ -22,7 +22,7 @@ export default function BetBatchDetailPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="flex min-h-[400px] items-center justify-center">
-          <p>Cargando batch...</p>
+          <p>Cargando operación...</p>
         </div>
       </div>
     );
@@ -33,9 +33,9 @@ export default function BetBatchDetailPage() {
       <div className="container mx-auto p-6">
         <CenteredErrorState
           error={error}
-          fallbackMessage="Batch no encontrado."
+          fallbackMessage="Operación no encontrada."
           backHref="/bets/batches"
-          backLabel="Volver a batches"
+          backLabel="Volver a operaciones"
         />
       </div>
     );

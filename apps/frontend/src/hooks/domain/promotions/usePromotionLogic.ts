@@ -18,7 +18,11 @@ import type {
   UsePromotionLogicReturn,
 } from "@/types/hooks";
 import { buildAnchorRefKey } from "@/utils/anchorCatalog";
-import { buildDefaultPhase, buildDefaultPromotion } from "@/utils/formDefaults";
+import {
+  buildBoundedTimeframe,
+  buildDefaultPhase,
+  buildDefaultPromotion,
+} from "@/utils/formDefaults";
 
 const promotionEvents = promotionAnchorEventOptions.map((option) => ({
   event: option.value,
@@ -108,7 +112,7 @@ const buildDraftAnchorCatalog = (
         rewardEntities.push({
           entityRefType: rewardRefData.entityRefType,
           entityRef: rewardRefData.entityRef,
-          entityLabel: `${phaseLabel} - Reward ${rewardIndex + 1} (${reward.type})`,
+          entityLabel: `${phaseLabel} - Recompensa ${rewardIndex + 1} (${reward.type})`,
           events: rewardEvents,
         });
       }
@@ -124,7 +128,7 @@ const buildDraftAnchorCatalog = (
             entityRef: qcRefData.entityRef,
             entityLabel:
               qc.description?.trim() ||
-              `Reward ${rewardIndex + 1} - QC ${qcIndex + 1} (${qc.type})`,
+              `Recompensa ${rewardIndex + 1} - Condición ${qcIndex + 1} (${qc.type})`,
             events: qualifyEvents,
           });
         }
@@ -144,7 +148,7 @@ const buildDraftAnchorCatalog = (
         entityRefType: qcRefData.entityRefType,
         entityRef: qcRefData.entityRef,
         entityLabel:
-          qc.description?.trim() || `Pool QC ${poolIndex + 1} (${qc.type})`,
+          qc.description?.trim() || `Pool condición ${poolIndex + 1} (${qc.type})`,
         events: qualifyEvents,
       });
     }
@@ -154,28 +158,28 @@ const buildDraftAnchorCatalog = (
   if (promotionEntities.length > 0) {
     result.push({
       entityType: "PROMOTION",
-      entityTypeLabel: "Promotion",
+      entityTypeLabel: "Promociones",
       entities: promotionEntities,
     });
   }
   if (phaseEntities.length > 0) {
     result.push({
       entityType: "PHASE",
-      entityTypeLabel: "Phases",
+      entityTypeLabel: "Fases",
       entities: phaseEntities,
     });
   }
   if (rewardEntities.length > 0) {
     result.push({
       entityType: "REWARD",
-      entityTypeLabel: "Rewards",
+      entityTypeLabel: "Recompensas",
       entities: rewardEntities,
     });
   }
   if (qualifyConditionEntities.length > 0) {
     result.push({
       entityType: "QUALIFY_CONDITION",
-      entityTypeLabel: "Qualify Conditions",
+      entityTypeLabel: "Condiciones de calificación",
       entities: qualifyConditionEntities,
     });
   }
@@ -276,7 +280,7 @@ export const usePromotionLogic = (
       });
     }
     if (data.timeframe !== undefined && data.timeframe !== null) {
-      setValue("phases.0.timeframe", data.timeframe, {
+      setValue("phases.0.timeframe", buildBoundedTimeframe(data.timeframe), {
         shouldValidate: true,
         shouldDirty: true,
       });

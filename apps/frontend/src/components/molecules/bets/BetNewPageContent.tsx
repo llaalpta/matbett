@@ -34,6 +34,7 @@ type BetNewPageContentProps = {
 
 function toRegisterPayload(data: UpdateBetsBatch): RegisterBetsBatch {
   return RegisterBetsBatchSchema.parse({
+    operation: data.operation,
     strategy: data.strategy,
     calculation: {
       scenarioId: data.calculation.scenarioId,
@@ -76,10 +77,10 @@ export function BetNewPageContent({
     clearApiError();
     try {
       const result = await createBetBatch.mutateAsync(toRegisterPayload(data));
-      notifySuccess("Batch de apuestas registrado.");
-      router.push(`/bets/${result.id}`);
+      notifySuccess("Operación de apuestas registrada.");
+      router.push(`/bets/batches/${result.id}`);
     } catch (error) {
-      setApiError(error, "No se pudo registrar el batch.");
+      setApiError(error, "No se pudo registrar la operación.");
     }
   };
 
@@ -110,8 +111,8 @@ export function BetNewPageContent({
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6 flex items-center gap-4">
+    <div className="container mx-auto min-w-0 overflow-x-hidden p-4 lg:p-5">
+      <div className="mb-4 flex flex-wrap items-start gap-3">
         <Link href={backHref}>
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -119,9 +120,9 @@ export function BetNewPageContent({
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold">Nuevo batch de apuestas</h1>
-          <p className="text-muted-foreground">
-            Registro batch + legs + participations alineado con el contrato de shared.
+          <h1 className="text-2xl font-bold leading-tight">Nueva operación de apuestas</h1>
+          <p className="text-muted-foreground text-sm">
+            Registra evento, apuestas relacionadas y contexto promocional en una sola operación.
           </p>
         </div>
       </div>
@@ -132,7 +133,7 @@ export function BetNewPageContent({
             <CardTitle>Necesitas una cuenta de bookmaker</CardTitle>
             <CardDescription>
               El registro de apuestas usa cuentas reales de bookmaker. Crea al
-              menos una antes de registrar tu primer batch.
+              menos una antes de registrar tu primera operación.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">

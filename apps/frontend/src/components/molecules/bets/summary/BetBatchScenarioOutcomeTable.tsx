@@ -1,10 +1,17 @@
 "use client";
 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { BetBatchFormValues } from "@/hooks/useBetBatchForm";
 import { cn } from "@/lib/utils";
 import {
   formatCurrencyAmount,
-  formatFixedNumber,
   formatFixedPercentage,
   formatSignedCurrencyAmount,
   getSignedMetricToneClass,
@@ -18,153 +25,88 @@ type BetBatchScenarioOutcomeTableProps = {
   hedge1Leg: BetBatchFormValues["legs"][number] | undefined;
 };
 
+const headClassName =
+  "text-muted-foreground h-8 px-2 py-1.5 text-left text-[11px] font-semibold";
+const numericHeadClassName = cn(headClassName, "text-right");
+const cellClassName = "px-2 py-1.5 text-xs";
+const numericCellClassName = cn(cellClassName, "text-right tabular-nums");
+
 export function BetBatchScenarioOutcomeTable({
   summary,
-  mainLeg,
-  hedge1Leg,
 }: BetBatchScenarioOutcomeTableProps) {
-  const backReturn = summary.totals.mainStake + summary.mainWins.mainProfit;
-  const layReturn = summary.totals.hedge1Stake;
-
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[760px] border-collapse text-sm">
-          <thead className="bg-muted/50">
-            <tr className="border-b">
-              <th className="px-4 py-3 text-left font-medium"></th>
-              <th className="px-4 py-3 text-right font-medium">Stake</th>
-              <th className="px-4 py-3 text-right font-medium">Cuota</th>
-              <th className="px-4 py-3 text-right font-medium">Retorno</th>
-              <th className="px-4 py-3 text-right font-medium">Riesgo</th>
-              <th className="px-4 py-3 text-right font-medium">
-                Beneficio si gana
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b">
-              <td className="px-4 py-3 font-medium">Back</td>
-              <td className="px-4 py-3 text-right">
-                {formatCurrencyAmount(summary.totals.mainStake)}
-              </td>
-              <td className="px-4 py-3 text-right">
-                {mainLeg?.odds ? formatFixedNumber(mainLeg.odds) : "—"}
-              </td>
-              <td className="px-4 py-3 text-right font-semibold">
-                {formatCurrencyAmount(backReturn)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.hedge1Wins.mainRisk)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.hedge1Wins.mainRisk)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.mainWins.mainProfit)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.mainWins.mainProfit)}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3 font-medium">Lay</td>
-              <td className="px-4 py-3 text-right">
-                {formatCurrencyAmount(summary.totals.hedge1Stake)}
-              </td>
-              <td className="px-4 py-3 text-right">
-                {hedge1Leg?.odds ? formatFixedNumber(hedge1Leg.odds) : "—"}
-              </td>
-              <td className="px-4 py-3 text-right font-semibold">
-                {formatCurrencyAmount(layReturn)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.mainWins.hedge1Risk)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.mainWins.hedge1Risk)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.hedge1Wins.hedge1Profit)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.hedge1Wins.hedge1Profit)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
-          <thead className="bg-muted/50">
-            <tr className="border-b">
-              <th className="px-4 py-3 text-left font-medium"></th>
-              <th className="px-4 py-3 text-right font-medium">Turnover</th>
-              <th className="px-4 py-3 text-right font-medium">
-                Beneficio si gana Backbet
-              </th>
-              <th className="px-4 py-3 text-right font-medium">
-                Beneficio si gana Laybet
-              </th>
-              <th className="px-4 py-3 text-right font-medium">
-                Yield si gana Backbet
-              </th>
-              <th className="px-4 py-3 text-right font-medium">
-                Yield si gana Laybet
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="px-4 py-3 font-medium">Global</td>
-              <td className="px-4 py-3 text-right font-semibold">
-                {formatCurrencyAmount(summary.totals.turnover)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.mainWins.balance)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.mainWins.balance)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.hedge1Wins.balance)
-                )}
-              >
-                {formatSignedCurrencyAmount(summary.hedge1Wins.balance)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.mainWins.yield)
-                )}
-              >
-                {formatFixedPercentage(summary.mainWins.yield)}
-              </td>
-              <td
-                className={cn(
-                  "px-4 py-3 text-right font-semibold",
-                  getSignedMetricToneClass(summary.hedge1Wins.yield)
-                )}
-              >
-                {formatFixedPercentage(summary.hedge1Wins.yield)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div className="max-w-full overflow-x-auto rounded-md border [contain:layout_paint]">
+      <Table className="w-full min-w-[720px] border-separate border-spacing-0 text-xs table-fixed">
+        <colgroup>
+          <col className="w-[240px]" />
+          <col className="w-[160px]" />
+          <col className="w-[160px]" />
+          <col className="w-[160px]" />
+        </colgroup>
+        <TableHeader>
+          <TableRow className="border-border/70 bg-muted/40 hover:bg-muted/40">
+            <TableHead className={headClassName}>Resultado posible</TableHead>
+            <TableHead className={numericHeadClassName}>Turnover</TableHead>
+            <TableHead className={numericHeadClassName}>
+              Balance estimado
+            </TableHead>
+            <TableHead className={numericHeadClassName}>Yield estimado</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <ScenarioResultRow
+            label="Gana la apuesta principal"
+            turnover={summary.totals.turnover}
+            balance={summary.mainWins.balance}
+            yieldValue={summary.mainWins.yield}
+          />
+          <ScenarioResultRow
+            label="Gana la cobertura"
+            turnover={summary.totals.turnover}
+            balance={summary.hedge1Wins.balance}
+            yieldValue={summary.hedge1Wins.yield}
+          />
+        </TableBody>
+      </Table>
     </div>
+  );
+}
+
+function ScenarioResultRow({
+  label,
+  turnover,
+  balance,
+  yieldValue,
+}: {
+  label: string;
+  turnover: number;
+  balance: number;
+  yieldValue: number;
+}) {
+  return (
+    <TableRow className="hover:bg-muted/20">
+      <TableCell className={cn(cellClassName, "font-medium")}>{label}</TableCell>
+      <TableCell className={cn(numericCellClassName, "font-semibold")}>
+        {formatCurrencyAmount(turnover)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          numericCellClassName,
+          "font-semibold",
+          getSignedMetricToneClass(balance)
+        )}
+      >
+        {formatSignedCurrencyAmount(balance)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          numericCellClassName,
+          "font-semibold",
+          getSignedMetricToneClass(yieldValue)
+        )}
+      >
+        {formatFixedPercentage(yieldValue)}
+      </TableCell>
+    </TableRow>
   );
 }

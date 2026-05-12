@@ -114,13 +114,13 @@ export default function DepositDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Contexto de promocion</CardTitle>
-            <CardDescription>Tracking asociado a qualify conditions</CardDescription>
+            <CardDescription>Tracking asociado a condiciones de calificación</CardDescription>
           </CardHeader>
           <CardContent>
             {qualifyParticipation ? (
               <div className="space-y-2">
                 <div>
-                  <p className="text-sm font-medium">Qualify Condition ID</p>
+                  <p className="text-sm font-medium">ID de condición</p>
                   <p className="text-muted-foreground text-sm">
                     {qualifyParticipation.qualifyConditionId}
                   </p>

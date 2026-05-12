@@ -10,7 +10,7 @@
 
 import { z } from 'zod';
 
-import { TimeframeSchema } from './timeframe.schema';
+import { BoundedTimeframeSchema } from './timeframe.schema';
 import { requiredNumber } from './utils';
 import {
   OddsRestrictionSchema,
@@ -27,7 +27,7 @@ import {
 
 export const FreeBetUsageConditionsSchema = z.object({
   type: z.literal('FREEBET'),
-  timeframe: TimeframeSchema,
+  timeframe: BoundedTimeframeSchema,
 
   // Comportamiento de uso
   mustUseComplete: z.boolean(),
@@ -51,7 +51,7 @@ export const FreeBetUsageConditionsSchema = z.object({
 export const BonusRolloverUsageConditionsSchema = z
   .object({
     type: z.literal('BET_BONUS_ROLLOVER'),
-    timeframe: TimeframeSchema,
+    timeframe: BoundedTimeframeSchema,
 
     // Configuracion del rollover
     multiplier: requiredNumber(1),
@@ -119,7 +119,7 @@ export const BonusRolloverUsageConditionsSchema = z
 
 export const BonusNoRolloverUsageConditionsSchema = z.object({
   type: z.literal('BET_BONUS_NO_ROLLOVER'),
-  timeframe: TimeframeSchema,
+  timeframe: BoundedTimeframeSchema,
   maxConversionMultiplier: z.number().min(0).optional(),
   maxConvertibleAmount: z.number().min(0).optional(),
 
@@ -146,7 +146,7 @@ export const BonusNoRolloverUsageConditionsSchema = z.object({
 
 export const CashbackUsageConditionsSchema = z.object({
   type: z.literal('CASHBACK_FREEBET'),
-  timeframe: TimeframeSchema,
+  timeframe: BoundedTimeframeSchema,
 
   // Restricciones de apuesta (con stake y outcome)
   oddsRestriction: OddsRestrictionSchema.optional(),
@@ -165,7 +165,7 @@ export const CashbackUsageConditionsSchema = z.object({
 export const EnhancedOddsUsageConditionsSchema = z
   .object({
     type: z.literal('ENHANCED_ODDS'),
-    timeframe: TimeframeSchema,
+    timeframe: BoundedTimeframeSchema,
     normalOdds: requiredNumber(0),
     enhancedOdds: requiredNumber(0),
     enhancedOddsMode: z.enum(['FIXED', 'PERCENTAGE']).optional(),
@@ -199,7 +199,7 @@ export const EnhancedOddsUsageConditionsSchema = z
 
 export const CasinoSpinsUsageConditionsSchema = z.object({
   type: z.literal('CASINO_SPINS'),
-  timeframe: TimeframeSchema,
+  timeframe: BoundedTimeframeSchema,
   spinsCount: requiredNumber(1),
   gameTitle: z.string().optional(),
 });
@@ -228,4 +228,3 @@ export type CashbackUsageConditions = z.infer<typeof CashbackUsageConditionsSche
 export type EnhancedOddsUsageConditions = z.infer<typeof EnhancedOddsUsageConditionsSchema>;
 export type CasinoSpinsUsageConditions = z.infer<typeof CasinoSpinsUsageConditionsSchema>;
 export type UsageConditions = z.infer<typeof UsageConditionsSchema>;
-

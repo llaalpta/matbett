@@ -42,7 +42,7 @@ export function useBetNewFromRewardContext(rewardId: string | undefined) {
       sourceLabel: reward.type,
       phaseName: matchingContext.phaseName,
       returnHref: `/rewards/${reward.id}`,
-      returnLabel: "Volver a la reward",
+      returnLabel: "Volver a la recompensa",
       initialParticipation: {
         kind: "REWARD_USAGE",
         rewardType: matchingContext.rewardType,
@@ -60,7 +60,7 @@ export function useBetNewFromRewardContext(rewardId: string | undefined) {
     }
 
     if (!supportedRewardTypes.has(reward.type)) {
-      return "Esta reward no se puede usar dentro del registro de apuestas.";
+      return "Esta recompensa no se puede usar dentro del registro de apuestas.";
     }
 
     if (availableContextsQuery.isLoading || availableContextsQuery.isFetching) {
@@ -72,7 +72,7 @@ export function useBetNewFromRewardContext(rewardId: string | undefined) {
     }
 
     if (!initialContext) {
-      return "Esta reward todavía no tiene un contexto de uso disponible para registrar apuestas.";
+      return "Esta recompensa todavía no tiene un contexto de uso disponible para registrar apuestas.";
     }
 
     return undefined;

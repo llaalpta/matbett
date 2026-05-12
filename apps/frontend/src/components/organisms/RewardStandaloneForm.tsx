@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { FormProvider } from "react-hook-form";
 
 import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
+import { FormActionBar } from "@/components/molecules/FormActionBar";
 import { StandaloneRewardFormFields } from "@/components/molecules/RewardForm";
-import { Button } from "@/components/ui/button";
-import { useAvailableQualifyConditions, usePromotion } from "@/hooks/api/usePromotions";
+import { usePromotion } from "@/hooks/api/usePromotions";
 import { useCreateReward, useReward, useUpdateReward } from "@/hooks/api/useRewards";
 import { useAnchorContext } from "@/hooks/domain/anchors/useAnchorContext";
 import { useApiErrorMessage } from "@/hooks/useApiErrorMessage";
@@ -37,9 +37,6 @@ export function RewardStandaloneForm({
   } = useAnchorContext({
     promotionId: rewardData?.promotionId,
   });
-  const { data: availableQualifyConditions } = useAvailableQualifyConditions(
-    rewardData?.promotionId
-  );
   const { data: promotionData, isLoading: isLoadingPromotion } = usePromotion(
     rewardData?.promotionId
   );
@@ -78,7 +75,7 @@ export function RewardStandaloneForm({
       <form
         ref={formRef}
         onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
-        className="space-y-6"
+        className="space-y-6 pb-24"
       >
         <ValidationErrorBanner<RewardFormData>
           errors={form.formState.errors}
@@ -98,12 +95,17 @@ export function RewardStandaloneForm({
           promotionData={promotionData ?? undefined}
           anchorCatalog={anchorCatalog}
           anchorOccurrences={anchorOccurrences}
-          availableQualifyConditions={availableQualifyConditions}
         />
 
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Guardando..." : "Guardar cambios"}
-        </Button>
+        <FormActionBar
+          onDiscard={() => form.reset()}
+          isLoading={isSubmitting}
+          showBackButton
+          backHref="/rewards"
+          backToLabel="Volver a recompensas"
+          saveLabel="Guardar cambios"
+          discardLabel="Descartar"
+        />
       </form>
     </FormProvider>
   );
@@ -171,7 +173,7 @@ export function RewardCreateForm({
       <form
         ref={formRef}
         onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
-        className="space-y-6"
+        className="space-y-6 pb-24"
       >
         <ValidationErrorBanner<RewardFormData>
           errors={form.formState.errors}
@@ -190,13 +192,17 @@ export function RewardCreateForm({
           promotionData={promotionData ?? undefined}
           anchorCatalog={anchorCatalog}
           anchorOccurrences={anchorOccurrences}
-          availableQualifyConditions={[]}
-          showQualifyConditionsSection={false}
         />
 
-        <Button type="submit" disabled={createRewardMutation.isPending}>
-          {createRewardMutation.isPending ? "Creando..." : "Crear reward"}
-        </Button>
+        <FormActionBar
+          onDiscard={() => form.reset()}
+          isLoading={createRewardMutation.isPending}
+          showBackButton
+          backHref={`/promotions/${promotionId}`}
+          backToLabel="Volver a promoción"
+          saveLabel="Crear recompensa"
+          discardLabel="Descartar"
+        />
       </form>
     </FormProvider>
   );

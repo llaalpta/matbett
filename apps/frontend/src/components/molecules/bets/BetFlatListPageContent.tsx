@@ -254,8 +254,8 @@ export default function BetFlatListPageContent() {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                title="Abrir batch"
-                aria-label="Abrir batch"
+                title="Ver operación"
+                aria-label="Ver operación"
               >
                 <Eye className="h-4 w-4" />
               </Button>
@@ -265,8 +265,8 @@ export default function BetFlatListPageContent() {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                title="Editar batch"
-                aria-label="Editar batch"
+                title="Editar operación"
+                aria-label="Editar operación"
               >
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -297,19 +297,19 @@ export default function BetFlatListPageContent() {
       <PageHeader
         eyebrow="Operativa"
         title="Apuestas"
-        description="Lista operativa de legs registradas para revisar ejecución real, contexto promocional, estado y balance de cierre."
+        description="Lista operativa de apuestas registradas para revisar ejecución real, contexto promocional, estado y balance de cierre."
         actions={
           <>
             <Link href="/bets/batches">
               <Button variant="outline">
                 <Rows3 className="mr-2 h-4 w-4" />
-                Ver batches
+                Ver operaciones
               </Button>
             </Link>
             <Link href="/bets/new">
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo batch
+                Nueva operación
               </Button>
             </Link>
           </>
@@ -460,7 +460,7 @@ export default function BetFlatListPageContent() {
         emptyState={
           <EmptyState
             title="No hay apuestas registradas"
-            description="Cuando registres batches, aquí podrás revisar cada leg por separado con su contexto promocional y balance real."
+            description="Cuando registres operaciones, aquí podrás revisar cada apuesta por separado con su contexto promocional y balance real."
             icon={ReceiptText}
             action={
               <Link href="/bets/new">

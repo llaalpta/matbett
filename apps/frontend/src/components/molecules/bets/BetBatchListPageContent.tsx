@@ -68,13 +68,13 @@ function isStrategyKindFilter(value: string): value is BatchFilters["strategyKin
 function getStrategySummary(batch: BetBatchSummary) {
   if (batch.strategy.kind === "NONE") {
     return {
-      primary: getLabel(strategyKindOptions, batch.strategy.kind),
-      secondary: "Batch standalone",
+      primary: getLabel(betLineModeOptions, batch.operation.lineMode),
+      secondary: getLabel(strategyKindOptions, batch.strategy.kind),
     };
   }
 
   return {
-    primary: getLabel(betLineModeOptions, batch.strategy.lineMode),
+    primary: getLabel(betLineModeOptions, batch.operation.lineMode),
     secondary: `${getLabel(strategyTypeOptions, batch.strategy.strategyType)} · ${getLabel(hedgeModeOptions, batch.strategy.mode)}`,
   };
 }
@@ -236,7 +236,7 @@ export default function BetBatchListPageContent() {
       },
       {
         accessorKey: "legsCount",
-        header: "Legs",
+        header: "Apuestas",
         enableSorting: false,
         cell: ({ row }) => (
           <div className="text-right font-medium tabular-nums">
@@ -286,8 +286,8 @@ export default function BetBatchListPageContent() {
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 p-0"
-                title="Abrir batch"
-                aria-label="Abrir batch"
+                title="Ver operación"
+                aria-label="Ver operación"
               >
                 <Eye className="h-4 w-4" />
               </Button>
@@ -297,8 +297,8 @@ export default function BetBatchListPageContent() {
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 p-0"
-                title="Editar batch"
-                aria-label="Editar batch"
+                title="Editar operación"
+                aria-label="Editar operación"
               >
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -307,8 +307,8 @@ export default function BetBatchListPageContent() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-              title="Eliminar batch"
-              aria-label="Eliminar batch"
+              title="Eliminar operación"
+              aria-label="Eliminar operación"
               onClick={() => {
                 clearApiError();
                 setBatchPendingDelete(row.original);
@@ -372,10 +372,10 @@ export default function BetBatchListPageContent() {
 
     try {
       await deleteBatch.mutateAsync({ id: batchPendingDelete.id });
-      notifySuccess("Batch eliminado.");
+      notifySuccess("Operación eliminada.");
       setBatchPendingDelete(null);
     } catch (deleteError) {
-      setApiError(deleteError, "No se pudo eliminar el batch.");
+      setApiError(deleteError, "No se pudo eliminar la operación.");
     }
   };
 
@@ -383,7 +383,7 @@ export default function BetBatchListPageContent() {
     return (
       <CenteredErrorState
         error={error}
-        fallbackMessage="No se pudieron cargar los batches."
+        fallbackMessage="No se pudieron cargar las operaciones."
         onRetry={() => {
           void refetch();
         }}
@@ -397,27 +397,27 @@ export default function BetBatchListPageContent() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Operativa"
-        title="Batches de apuestas"
-        description="Vista agregada de grupos de legs registrados. Úsala para revisar el batch completo; la operativa diaria principal está en la lista flat de apuestas."
+        title="Operaciones de apuestas"
+        description="Vista agregada de apuestas relacionadas por una misma estrategia. Úsala para revisar la operación completa; la tabla de apuestas mantiene la vista plana de apuestas individuales."
         actions={
           <>
             <Link href="/bets">
               <Button variant="outline">
                 <Rows3 className="mr-2 h-4 w-4" />
-                Ver bets
+                Ver apuestas
               </Button>
             </Link>
             <Link href="/bets/new">
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo batch
+                Nueva operación
               </Button>
             </Link>
           </>
         }
         meta={
           <>
-            <span>{meta?.rowCount ?? 0} batches</span>
+            <span>{meta?.rowCount ?? 0} operaciones</span>
             <span>{isFetching ? "Actualizando datos..." : "Datos sincronizados"}</span>
           </>
         }
@@ -446,7 +446,7 @@ export default function BetBatchListPageContent() {
                   Estado
                 </div>
                 <Select
-                  name="batchStatus"
+                  name="operationStatus"
                   value={filters.status}
                   onValueChange={handleStatusFilterChange}
                 >
@@ -469,7 +469,7 @@ export default function BetBatchListPageContent() {
                   Cobertura
                 </div>
                 <Select
-                  name="batchStrategyKind"
+                  name="operationStrategyKind"
                   value={filters.strategyKind}
                   onValueChange={handleStrategyKindChange}
                 >
@@ -495,7 +495,7 @@ export default function BetBatchListPageContent() {
                   Cuenta
                 </div>
                 <Select
-                  name="batchBookmakerAccount"
+                  name="operationBookmakerAccount"
                   value={filters.bookmakerAccountId}
                   onValueChange={handleBookmakerAccountChange}
                 >
@@ -535,14 +535,14 @@ export default function BetBatchListPageContent() {
         }
         emptyState={
           <EmptyState
-            title="No hay batches registrados"
-            description="Empieza registrando un batch y usa después esta vista para revisar el conjunto completo de legs y resultados."
+            title="No hay operaciones registradas"
+            description="Empieza registrando una operación y usa después esta vista para revisar el conjunto completo de apuestas y resultados."
             icon={ReceiptText}
             action={
               <Link href="/bets/new">
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  Registrar primer batch
+                  Registrar primera operación
                 </Button>
               </Link>
             }
@@ -558,9 +558,9 @@ export default function BetBatchListPageContent() {
             setBatchPendingDelete(null);
           }
         }}
-        title="Eliminar batch"
-        description="Se eliminará el batch completo con sus legs y participaciones. Esta acción no se puede deshacer."
-        confirmText="Eliminar batch"
+        title="Eliminar operación"
+        description="Se eliminará la operación completa con sus apuestas y participaciones. Esta acción no se puede deshacer."
+        confirmText="Eliminar operación"
         cancelText="Cancelar"
         onConfirm={() => {
           void handleConfirmDelete();

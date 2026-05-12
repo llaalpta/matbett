@@ -7,12 +7,10 @@ import { useParams, useRouter } from "next/navigation";
 import { QualifyConditionStandaloneForm } from "@/components/organisms/QualifyConditionStandaloneForm";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DetailGrid,
+  DetailRow,
+} from "@/components/ui/detail-grid";
+import { PageHeader } from "@/components/ui/page-header";
 import { usePromotion } from "@/hooks/api/usePromotions";
 import { useCreateQualifyConditionForReward } from "@/hooks/api/useQualifyConditions";
 import { useReward } from "@/hooks/api/useRewards";
@@ -41,55 +39,37 @@ export default function QualifyConditionCreateFromRewardPage() {
 
   return (
     <div className="container mx-auto space-y-6 p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Qualify Conditions
-          </p>
-          <h1 className="text-2xl font-semibold">
-            Nueva qualify condition
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Crea una condición dentro del contexto de una reward existente.
-          </p>
-        </div>
-        <Link href={`/rewards/${rewardId}`}>
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver a reward
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Condiciones de calificación"
+        title="Nueva condición de calificación"
+        description="Crea una condición dentro del contexto de una recompensa existente."
+        actions={
+          <Link href={`/rewards/${rewardId}`}>
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver a recompensa
+            </Button>
+          </Link>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Contexto</CardTitle>
-          <CardDescription>
-            La condición quedará vinculada a esta reward y al pool de su
-            promoción.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-3">
-          <div>
-            <p className="font-medium">Promoción</p>
-            <p className="text-muted-foreground">
-              {isLoading ? "Cargando..." : promotion?.name ?? "No disponible"}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Fase</p>
-            <p className="text-muted-foreground">
-              {isLoading ? "Cargando..." : phase?.name ?? "No disponible"}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Reward</p>
-            <p className="text-muted-foreground">
-              {isLoading ? "Cargando..." : reward?.type ?? "No disponible"}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Contexto</h2>
+        <DetailGrid className="rounded-md border bg-card p-4">
+          <DetailRow
+            label="Promoción"
+            value={isLoading ? "Cargando..." : promotion?.name ?? "No disponible"}
+          />
+          <DetailRow
+            label="Fase"
+            value={isLoading ? "Cargando..." : phase?.name ?? "No disponible"}
+          />
+          <DetailRow
+            label="Recompensa"
+            value={isLoading ? "Cargando..." : reward?.type ?? "No disponible"}
+          />
+        </DetailGrid>
+      </section>
 
       <QualifyConditionStandaloneForm
         promotionId={reward?.promotionId}
@@ -97,7 +77,6 @@ export default function QualifyConditionCreateFromRewardPage() {
         onSubmit={handleSubmit}
         isSubmitting={createMutation.isPending}
         submitLabel="Crear condición"
-        submittingLabel="Creando..."
         successMessage="Condición de calificación creada."
         errorMessage="No se pudo crear la condición de calificación."
       />

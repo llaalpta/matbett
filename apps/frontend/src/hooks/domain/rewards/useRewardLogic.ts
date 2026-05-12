@@ -215,7 +215,6 @@ export function usePromotionRewardLogic(
     append: appendQualifyCondition,
     remove: removeQualifyCondition,
     update: updateQualifyCondition,
-    replace: replaceQualifyConditions,
   } = useFieldArray({
     control,
     name: paths.qualifyConditions,
@@ -240,21 +239,19 @@ export function usePromotionRewardLogic(
       const defaults = buildDefaultReward(newType);
       const currentReward = getValues(paths.reward);
 
-      // Importante: limpiar explícitamente el field array para evitar filas "fantasma"
-      // cuando se cambia el tipo de reward.
-      replaceQualifyConditions([]);
-
       setValue(
         paths.reward,
         {
           ...defaults,
           id: currentReward?.id,
           clientId: currentReward?.clientId ?? defaults.clientId,
+          qualifyConditions:
+            currentReward?.qualifyConditions ?? defaults.qualifyConditions,
         },
         { shouldDirty: true }
       );
     },
-    [getValues, paths.reward, replaceQualifyConditions, setValue]
+    [getValues, paths.reward, setValue]
   );
 
   const syncConditionsByValueType = useRewardValueTypeSync({
@@ -327,7 +324,6 @@ export function useStandaloneRewardLogic(
     append: appendQualifyCondition,
     remove: removeQualifyCondition,
     update: updateQualifyCondition,
-    replace: replaceQualifyConditions,
   } = useFieldArray({
     control,
     name: paths.qualifyConditions,
@@ -352,16 +348,15 @@ export function useStandaloneRewardLogic(
       const defaults = buildDefaultReward(newType);
       const currentReward = getValues();
 
-      // Misma limpieza explícita en standalone para mantener sincronía con useFieldArray.
-      replaceQualifyConditions([]);
-
       reset({
         ...defaults,
         id: currentReward.id,
         clientId: currentReward.clientId ?? defaults.clientId,
+        qualifyConditions:
+          currentReward.qualifyConditions ?? defaults.qualifyConditions,
       });
     },
-    [getValues, replaceQualifyConditions, reset]
+    [getValues, reset]
   );
 
   const syncConditionsByValueType = useRewardValueTypeSync({

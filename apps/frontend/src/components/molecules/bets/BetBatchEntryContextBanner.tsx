@@ -30,18 +30,18 @@ export function BetBatchEntryContextBanner({
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="text-base">
             {initialContext.entryType === "qualify-condition"
-              ? "Entrada contextual desde qualify condition"
-              : "Entrada contextual desde reward"}
+              ? "Entrada contextual desde condición de calificación"
+              : "Entrada contextual desde recompensa"}
           </CardTitle>
           <Badge variant="outline">
-            {initialContext.entryType === "qualify-condition" ? "QC" : "Reward"}
+            {initialContext.entryType === "qualify-condition" ? "Condición" : "Recompensa"}
           </Badge>
           <Badge variant="secondary">Contexto aplicado</Badge>
         </div>
         <CardDescription>
           {initialContext.entryType === "qualify-condition"
-            ? "El formulario se ha abierto desde una qualify condition que puede registrar apuestas."
-            : "El formulario se ha abierto desde una reward utilizable en apuestas."}
+            ? "El formulario se ha abierto desde una condición de calificación que puede registrar apuestas."
+            : "El formulario se ha abierto desde una recompensa utilizable en apuestas."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -62,7 +62,7 @@ export function BetBatchEntryContextBanner({
           ) : (
             <>
               <div className="text-sm">
-                <span className="font-medium">Reward:</span>{" "}
+                <span className="font-medium">Recompensa:</span>{" "}
                 {initialContext.sourceLabel ?? "Sin dato"}
               </div>
               <div className="text-sm">

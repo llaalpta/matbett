@@ -51,9 +51,11 @@ export type {
 export {
   AnchorRefTypeSchema,
   TimeframeAnchorRefSchema,
+  BoundedAbsoluteTimeframeSchema,
   AbsoluteTimeframeSchema,
   RelativeTimeframeSchema,
   TimeframeSchema,
+  BoundedTimeframeSchema,
   AnchorCatalogSchema,
   AnchorOccurrencesSchema,
   AnchorCatalogEventSchema,
@@ -65,9 +67,11 @@ export {
 export type {
   AnchorRefType,
   TimeframeAnchorRef,
+  BoundedAbsoluteTimeframe,
   AbsoluteTimeframe,
   RelativeTimeframe,
   Timeframe,
+  BoundedTimeframe,
   AnchorCatalog,
   AnchorOccurrences,
   AnchorCatalogEvent,

@@ -1,158 +1,192 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { RewardServerModel } from "@/types/hooks";
+import { formatCurrencyAmount } from "@/utils/formatters";
 
-/**
- * UsageTrackingForm - Componente READ-ONLY para mostrar tracking de uso de rewards
- *
- * IMPORTANTE: Este componente NO edita datos, solo los muestra.
- * El usageTracking es calculado por el backend y se pasa como prop desde serverData.
- */
-interface UsageTrackingFormProps {
+type UsageMetric = {
+  label: string;
+  value: string;
+  tone?: "default" | "positive" | "warning" | "info";
+};
+
+type RewardUsageTrackingSummaryProps = {
   rewardServerData?: RewardServerModel;
+};
+
+const metricToneClass = {
+  default: "text-foreground",
+  positive: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-700 dark:text-amber-400",
+  info: "text-sky-700 dark:text-sky-400",
+} satisfies Record<NonNullable<UsageMetric["tone"]>, string>;
+
+function UsageMetricGrid({ metrics }: { metrics: UsageMetric[] }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {metrics.map((metric) => (
+        <div key={metric.label} className="rounded-md border bg-background px-3 py-2">
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.05em]">
+            {metric.label}
+          </div>
+          <div
+            className={`mt-0.5 text-sm font-semibold tabular-nums ${metricToneClass[metric.tone ?? "default"]}`}
+          >
+            {metric.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-export function UsageTrackingForm({ rewardServerData }: UsageTrackingFormProps) {
-  if (!rewardServerData) {
-    return null;
+export function RewardUsageTrackingSummary({
+  rewardServerData,
+}: RewardUsageTrackingSummaryProps) {
+  if (!rewardServerData?.usageTracking) {
+    return (
+      <div className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
+        No hay datos de uso todavía. Los datos aparecerán cuando se registre el
+        primer uso de esta recompensa.
+      </div>
+    );
   }
 
-  const usageTracking = rewardServerData.usageTracking;
-  const rewardType = rewardServerData.type;
+  const { usageTracking, type: rewardType } = rewardServerData;
 
-  if (!usageTracking) {
+  if (rewardType === "FREEBET" && usageTracking.type === "FREEBET") {
     return (
-      <Card className="border-muted-foreground/30 border-dashed">
-        <CardContent className="py-6 text-center text-sm text-muted-foreground">
-          No hay datos de uso todavía. Los datos aparecerán cuando el usuario empiece a usar la recompensa.
-        </CardContent>
-      </Card>
+      <UsageMetricGrid
+        metrics={[
+          {
+            label: "Total usado",
+            value: formatCurrencyAmount(usageTracking.totalUsed),
+          },
+          {
+            label: "Balance restante",
+            value: formatCurrencyAmount(usageTracking.remainingBalance),
+            tone: "positive",
+          },
+        ]}
+      />
+    );
+  }
+
+  if (
+    rewardType === "CASHBACK_FREEBET" &&
+    usageTracking.type === "CASHBACK_FREEBET"
+  ) {
+    return (
+      <UsageMetricGrid
+        metrics={[
+          {
+            label: "Cashback generado",
+            value: formatCurrencyAmount(usageTracking.totalCashback),
+          },
+        ]}
+      />
+    );
+  }
+
+  if (
+    rewardType === "BET_BONUS_ROLLOVER" &&
+    usageTracking.type === "BET_BONUS_ROLLOVER"
+  ) {
+    const denominator =
+      usageTracking.rolloverProgress + usageTracking.remainingRollover;
+    const progress =
+      denominator > 0
+        ? Math.min((usageTracking.rolloverProgress / denominator) * 100, 100)
+        : 0;
+
+    return (
+      <div className="space-y-3">
+        <UsageMetricGrid
+          metrics={[
+            {
+              label: "Total usado",
+              value: formatCurrencyAmount(usageTracking.totalUsed),
+            },
+            {
+              label: "Rollover completado",
+              value: formatCurrencyAmount(usageTracking.rolloverProgress),
+              tone: "info",
+            },
+            {
+              label: "Rollover restante",
+              value: formatCurrencyAmount(usageTracking.remainingRollover),
+              tone: "warning",
+            },
+          ]}
+        />
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Progreso del rollover</span>
+            <span className="font-medium tabular-nums">
+              {formatCurrencyAmount(usageTracking.rolloverProgress)} apostados
+            </span>
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    rewardType === "BET_BONUS_NO_ROLLOVER" &&
+    usageTracking.type === "BET_BONUS_NO_ROLLOVER"
+  ) {
+    return (
+      <UsageMetricGrid
+        metrics={[
+          {
+            label: "Total usado",
+            value: formatCurrencyAmount(usageTracking.totalUsed),
+          },
+        ]}
+      />
+    );
+  }
+
+  if (rewardType === "ENHANCED_ODDS" && usageTracking.type === "ENHANCED_ODDS") {
+    return (
+      <UsageMetricGrid
+        metrics={[
+          {
+            label: "Cuotas utilizadas",
+            value: usageTracking.oddsUsed ? "Sí" : "No",
+            tone: usageTracking.oddsUsed ? "positive" : "default",
+          },
+        ]}
+      />
+    );
+  }
+
+  if (rewardType === "CASINO_SPINS" && usageTracking.type === "CASINO_SPINS") {
+    return (
+      <UsageMetricGrid
+        metrics={[
+          {
+            label: "Spins usados",
+            value: usageTracking.spinsUsed.toString(),
+          },
+          {
+            label: "Spins restantes",
+            value: usageTracking.remainingSpins.toString(),
+            tone: "positive",
+          },
+        ]}
+      />
     );
   }
 
   return (
-    <Card className="border-indigo-200 bg-indigo-50/50">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-indigo-900">
-            Seguimiento de Uso de Recompensa
-          </CardTitle>
-          <Badge variant="outline" className="bg-indigo-100">
-            {rewardType}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* FREEBET tracking */}
-        {rewardType === "FREEBET" && usageTracking.type === "FREEBET" && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Total Usado</div>
-              <div className="font-mono text-lg font-semibold">
-                {usageTracking.totalUsed} €
-              </div>
-            </div>
-            <div className="bg-white rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Balance Restante</div>
-              <div className="font-mono text-lg font-semibold text-green-600">
-                {usageTracking.remainingBalance} €
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CASHBACK_FREEBET tracking */}
-        {rewardType === "CASHBACK_FREEBET" && usageTracking.type === "CASHBACK_FREEBET" && (
-          <div className="bg-white rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Total Cashback Generado</div>
-            <div className="font-mono text-lg font-semibold">
-              {usageTracking.totalCashback} €
-            </div>
-          </div>
-        )}
-
-        {/* BET_BONUS_ROLLOVER tracking */}
-        {rewardType === "BET_BONUS_ROLLOVER" && usageTracking.type === "BET_BONUS_ROLLOVER" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Total Usado</div>
-                <div className="font-mono text-sm font-semibold">
-                  {usageTracking.totalUsed} €
-                </div>
-              </div>
-              <div className="bg-white rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Progreso Rollover</div>
-                <div className="font-mono text-sm font-semibold text-blue-600">
-                  {usageTracking.rolloverProgress} €
-                </div>
-              </div>
-              <div className="bg-white rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Rollover Restante</div>
-                <div className="font-mono text-sm font-semibold text-orange-600">
-                  {usageTracking.remainingRollover} €
-                </div>
-              </div>
-            </div>
-            {/* Progress bar */}
-            {usageTracking.rolloverProgress > 0 && (
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-muted-foreground">Progreso del Rollover</span>
-                  <span className="font-semibold">
-                    {usageTracking.rolloverProgress} € apostados
-                  </span>
-                </div>
-                <Progress
-                  value={Math.min((usageTracking.rolloverProgress / (usageTracking.rolloverProgress + usageTracking.remainingRollover)) * 100, 100)}
-                  className="h-2"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* BET_BONUS_NO_ROLLOVER tracking */}
-        {rewardType === "BET_BONUS_NO_ROLLOVER" && usageTracking.type === "BET_BONUS_NO_ROLLOVER" && (
-          <div className="bg-white rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Total Usado</div>
-            <div className="font-mono text-lg font-semibold">
-              {usageTracking.totalUsed} €
-            </div>
-          </div>
-        )}
-
-        {/* ENHANCED_ODDS tracking */}
-        {rewardType === "ENHANCED_ODDS" && usageTracking.type === "ENHANCED_ODDS" && (
-          <div className="bg-white rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Cuotas Utilizadas</div>
-            <div className="font-mono text-lg font-semibold">
-              {usageTracking.oddsUsed ? "Sí" : "No"}
-            </div>
-          </div>
-        )}
-
-        {/* CASINO_SPINS tracking */}
-        {rewardType === "CASINO_SPINS" && usageTracking.type === "CASINO_SPINS" && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Spins Usados</div>
-              <div className="font-mono text-lg font-semibold">
-                {usageTracking.spinsUsed}
-              </div>
-            </div>
-            <div className="bg-white rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Spins Restantes</div>
-              <div className="font-mono text-lg font-semibold text-green-600">
-                {usageTracking.remainingSpins}
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
+      El tracking de uso no coincide con el tipo actual de recompensa.
+    </div>
   );
+}
+
+export function UsageTrackingForm(props: RewardUsageTrackingSummaryProps) {
+  return <RewardUsageTrackingSummary {...props} />;
 }

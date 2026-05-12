@@ -4,7 +4,6 @@ import {
   betParticipationKindOptions,
   betStatusOptions,
   getScenarioNaturalLabel,
-  hedgeRoleOptions,
   optionsOptions,
   rewardTypeOptions,
   type BetRegistrationBatch,
@@ -23,6 +22,9 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import {
+  getBetOperationBetSummary,
+} from "@/utils/bets";
+import {
   formatCurrencyAmount,
   formatFixedNumber,
   formatFixedPercentage,
@@ -39,7 +41,7 @@ function getBatchPresentation(batch: BetRegistrationBatch) {
     : "Sin evento";
 
   return {
-    title: scenarioLabel?.primary ?? "Batch de apuestas",
+    title: scenarioLabel?.primary ?? "Operación de apuestas",
     subtitle: scenarioLabel
       ? `${scenarioLabel.secondary} · ${eventSummary}`
       : eventSummary,
@@ -78,10 +80,6 @@ function getOptionLabel(
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function getLegRoleLabel(role: string | undefined) {
-  return getOptionLabel(hedgeRoleOptions, role, "Leg");
-}
-
 function getParticipationLabel(
   participation: BetRegistrationBatch["legs"][number]["participations"][number]
 ) {
@@ -105,7 +103,7 @@ export function BetBatchDetailPageContent({
           <Link href="/bets/batches">
             <Button variant="outline" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver a batches
+              Volver a operaciones
             </Button>
           </Link>
           <div>
@@ -116,7 +114,7 @@ export function BetBatchDetailPageContent({
         <Link href={`/bets/${batch.id}`}>
           <Button>
             <Pencil className="mr-2 h-4 w-4" />
-            Editar
+            Editar operación
           </Button>
         </Link>
       </div>
@@ -124,7 +122,7 @@ export function BetBatchDetailPageContent({
       <div className="grid gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Configuración del batch</CardTitle>
+            <CardTitle>Configuración de la operación</CardTitle>
             <CardDescription>{batch.id}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-3">
@@ -136,7 +134,7 @@ export function BetBatchDetailPageContent({
 
         <Card>
           <CardHeader>
-            <CardTitle>Eventos</CardTitle>
+            <CardTitle>Evento{batch.events.length > 1 ? "s" : ""} de la operación</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {batch.events.map((event, index) => (
@@ -152,14 +150,14 @@ export function BetBatchDetailPageContent({
 
         <Card>
           <CardHeader>
-            <CardTitle>Legs</CardTitle>
-            <CardDescription>Vista plana de las apuestas registradas dentro del batch.</CardDescription>
+            <CardTitle>Apuestas de la operación</CardTitle>
+            <CardDescription>Vista plana de las apuestas registradas dentro de esta operación.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-muted/40">
                 <tr className="border-b">
-                  <th className="px-3 py-2 text-left text-xs font-semibold tracking-[0.04em]">Rol</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold tracking-[0.04em]">Apuesta</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold tracking-[0.04em]">Estado</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold tracking-[0.04em]">Selección</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold tracking-[0.04em]">Stake</th>
@@ -171,9 +169,22 @@ export function BetBatchDetailPageContent({
                 </tr>
               </thead>
               <tbody>
-                {batch.legs.map((leg) => (
+                {batch.legs.map((leg, index) => {
+                  const roleSummary = getBetOperationBetSummary({
+                    index,
+                    operation: batch.operation,
+                    role: leg.legRole,
+                    strategy: batch.strategy,
+                  });
+
+                  return (
                   <tr key={leg.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-2 font-medium">{getLegRoleLabel(leg.legRole)}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{roleSummary.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {roleSummary.description}
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <StatusBadge
                         status={leg.status}
@@ -229,7 +240,8 @@ export function BetBatchDetailPageContent({
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </CardContent>

@@ -6,14 +6,14 @@ import { useFormContext } from "react-hook-form";
 import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
 import { useBetAdjustmentAvailabilitySync } from "@/hooks/domain/bets/useBetAdjustmentAvailabilitySync";
+import { useCombinedMainOddsSync } from "@/hooks/domain/bets/useCombinedMainOddsSync";
 import { useSingleMatchedBettingSelectionSync } from "@/hooks/domain/bets/useSingleMatchedBettingSelectionSync";
 import type { BetBatchFormValues } from "@/hooks/useBetBatchForm";
 import { useFormInvalidSubmitFocus } from "@/hooks/useFormInvalidSubmitFocus";
 
 import { BetBatchEntryContextBanner } from "./BetBatchEntryContextBanner";
-import { BetBatchEventsSection } from "./BetBatchEventsSection";
 import { BetBatchLegsSection } from "./BetBatchLegsSection";
-import { BetBatchStrategySection } from "./BetBatchStrategySection";
+import { BetBatchSetupSection } from "./BetBatchSetupSection";
 import { BetBatchSummarySection } from "./BetBatchSummarySection";
 import type { BetBatchFormProps, BookmakerAccountLike } from "./types";
 
@@ -51,6 +51,7 @@ export function BetBatchFormContent({
     useFormInvalidSubmitFocus();
 
   useSingleMatchedBettingSelectionSync();
+  useCombinedMainOddsSync();
   useBetAdjustmentAvailabilitySync({
     bookmakerAccounts,
     hasBookmakerAccountsLoaded,
@@ -60,7 +61,7 @@ export function BetBatchFormContent({
     <form
       ref={formRef}
       onSubmit={form.handleSubmit(onSubmit, focusFirstInvalidField)}
-      className="space-y-6"
+      className="min-w-0 space-y-3"
     >
       <ValidationErrorBanner<BetBatchFormValues>
         errors={form.formState.errors}
@@ -77,20 +78,19 @@ export function BetBatchFormContent({
         initialContext={initialContext}
       />
 
-      <BetBatchStrategySection
+      <BetBatchSetupSection
         mode={mode}
         defaultBookmakerAccountId={defaultBookmakerAccountId}
       />
-      <BetBatchEventsSection />
       <BetBatchLegsSection mode={mode} bookmakerAccounts={bookmakerAccounts} />
       <BetBatchSummarySection />
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isLoading}>
+      <div className="sticky bottom-0 z-10 flex justify-end border-t bg-background/95 py-3 backdrop-blur">
+        <Button type="submit" size="sm" disabled={isLoading}>
           {isLoading
             ? "Guardando..."
             : mode === "create"
-              ? "Registrar batch"
+              ? "Registrar operación"
               : "Guardar cambios"}
         </Button>
       </div>

@@ -65,10 +65,10 @@ export default function EditBetPage() {
         id: batchId,
         data: toUpdatePayload(data),
       });
-      notifySuccess("Batch actualizado.");
+      notifySuccess("Operación actualizada.");
       router.push(`/bets/batches/${batchId}`);
     } catch (submitError) {
-      setApiError(submitError, "No se pudo actualizar el batch.");
+      setApiError(submitError, "No se pudo actualizar la operación.");
     }
   };
 
@@ -76,7 +76,7 @@ export default function EditBetPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="flex min-h-[400px] items-center justify-center">
-          <p>Cargando batch...</p>
+          <p>Cargando operación...</p>
         </div>
       </div>
     );
@@ -87,7 +87,7 @@ export default function EditBetPage() {
       <div className="container mx-auto p-6">
         <CenteredErrorState
           error={error}
-          fallbackMessage="Batch no encontrado."
+          fallbackMessage="Operación no encontrada."
           backHref="/bets"
           backLabel="Volver a apuestas"
         />
@@ -105,9 +105,9 @@ export default function EditBetPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold">Editar batch</h1>
+          <h1 className="text-3xl font-bold">Editar operación de apuestas</h1>
           <p className="text-muted-foreground">
-            Edición completa del batch con diff backend sobre legs y participaciones.
+            Edita evento, apuestas relacionadas y contexto promocional de la operación.
           </p>
         </div>
       </div>

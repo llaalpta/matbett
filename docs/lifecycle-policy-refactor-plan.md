@@ -120,6 +120,10 @@ This causes drift and ambiguity in areas such as:
 
 ### Promotion timeframe warnings
 
+- Promotion start date is required, but promotion end date is optional.
+- An open-ended promotion has no automatic date-drift warning from its own
+  timeframe end; child phases, qualify conditions, and reward usage windows
+  still own their specific deadlines.
 - If promotion timeframe has passed and status is still non-terminal, show a
   warning.
 - Warning does not auto-change status.

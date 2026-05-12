@@ -1,23 +1,14 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { FormProvider, Path, useFormContext } from "react-hook-form";
+import React, { useEffect, useRef, useState } from "react";
+import { FormProvider, useFormContext, useWatch } from "react-hook-form";
 
 import { TypographyH2 } from "@/components/atoms";
 import { ConfirmDialog } from "@/components/atoms/ConfirmDialog";
 import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
-import {
-  DepositQualifyModal,
-  PhaseForm,
-  PromotionBasicInfoForm,
-} from "@/components/molecules";
+import { PhaseForm, PromotionBasicInfoForm } from "@/components/molecules";
 import { FormActionBar } from "@/components/molecules/FormActionBar";
+import { PhaseRewardsTable } from "@/components/molecules/promotions/PhaseRewardsTable";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePhaseAccessLogic } from "@/hooks/domain/promotions/usePhaseAccessLogic";
 import { usePromotionLogic } from "@/hooks/domain/promotions/usePromotionLogic";
 import { useFormInvalidSubmitFocus } from "@/hooks/useFormInvalidSubmitFocus";
 import {
@@ -36,6 +27,58 @@ interface PromotionFormProps {
   showBackButton?: boolean;
   backHref?: string;
   backToLabel?: string;
+}
+
+type SinglePhaseRewardsSectionProps = {
+  initialData?: PromotionServerModel;
+  promotionId?: string;
+  anchorOccurrences: ReturnType<typeof usePromotionLogic>["anchorOccurrences"];
+};
+
+function SinglePhaseRewardsSection({
+  initialData,
+  promotionId,
+  anchorOccurrences,
+}: SinglePhaseRewardsSectionProps) {
+  const { control } = useFormContext<PromotionFormData>();
+  const promotionStatus = useWatch({ control, name: "status" });
+  const promotionTimeframe = useWatch({ control, name: "timeframe" });
+  const phaseRewards = useWatch({ control, name: "phases.0.rewards" });
+  const phaseServerData = initialData?.phases?.[0];
+  const phaseAccess = usePhaseAccessLogic({
+    isPersisted: Boolean(phaseServerData?.id),
+    promotionStatus,
+    phaseStatus: promotionStatus,
+    timeframe: promotionTimeframe,
+    promotionTimeframe,
+    anchorOccurrences,
+    rewards: phaseRewards,
+  });
+  const canAddReward =
+    Boolean(promotionId && phaseServerData?.id) && phaseAccess.isStructureEditable;
+  const addRewardDisabledReason =
+    !phaseServerData?.id
+      ? "Guarda la promoción primero para añadir recompensas."
+      : phaseAccess.structureLockedReason;
+
+  return (
+    <div className="mt-6 border-t pt-6">
+      <PhaseRewardsTable
+        rewards={phaseServerData?.rewards ?? []}
+        phaseId={phaseServerData?.id}
+        promotionId={promotionId}
+        canAddReward={canAddReward}
+        addRewardDisabledReason={addRewardDisabledReason}
+        title="Recompensas de la promoción"
+        description={
+          phaseServerData?.rewards?.length
+            ? `${phaseServerData.rewards.length} recompensa${phaseServerData.rewards.length === 1 ? "" : "s"} persistida${phaseServerData.rewards.length === 1 ? "" : "s"}.`
+            : "La promoción todavía no tiene recompensas persistidas."
+        }
+        emptyDescription="Guarda la promoción y añade una recompensa desde este contexto."
+      />
+    </div>
+  );
 }
 
 const PromotionFormContent: React.FC<PromotionFormProps> = ({
@@ -76,135 +119,41 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
 
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [selectedRewardIndex, setSelectedRewardIndex] = useState<number>();
-  const [selectedConditionIndex, setSelectedConditionIndex] =
-    useState<number>();
-  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
-
-  const handleRewardSelect = useCallback((_: string, index: number) => {
-    setSelectedRewardIndex(index);
-    setSelectedConditionIndex(undefined);
-  }, []);
-
-  const handleQualifyConditionSelect = useCallback(
-    (_: string, index: number) => {
-      setSelectedConditionIndex(index);
-      setIsDepositModalOpen(true);
-    },
-    []
-  );
-
-  const closeDepositModal = useCallback(() => {
-    setIsDepositModalOpen(false);
-  }, []);
-
-  const handlePhaseTabChange = useCallback((value: string) => {
-    const parsedIndex = Number.parseInt(value, 10);
-    if (Number.isNaN(parsedIndex)) {
-      return;
-    }
-    setPhaseIndex(parsedIndex);
-    setSelectedRewardIndex(undefined);
-    setSelectedConditionIndex(undefined);
-    setIsDepositModalOpen(false);
-  }, []);
-
   const pendingSinglePhaseValueRef = useRef<
     PromotionFormData["cardinality"] | null
   >(null);
 
-  const handleSinglePhaseChange = useCallback(
-    (value: PromotionFormData["cardinality"]) => {
+  const handleSinglePhaseChange = (
+    value: PromotionFormData["cardinality"]
+  ) => {
       if (value === "SINGLE" && !isSinglePhase && hasDataInAdditionalPhases()) {
         pendingSinglePhaseValueRef.current = value;
         setShowConfirmDialog(true);
         return;
       }
       handleCardinalityChange(value);
-    },
-    [handleCardinalityChange, hasDataInAdditionalPhases, isSinglePhase]
-  );
+  };
 
-  const handleConfirmToggle = useCallback(() => {
+  const handleConfirmToggle = () => {
     if (pendingSinglePhaseValueRef.current) {
       handleCardinalityChange(pendingSinglePhaseValueRef.current);
       pendingSinglePhaseValueRef.current = null;
     }
     setShowConfirmDialog(false);
-  }, [handleCardinalityChange]);
+  };
 
-  const handleConfirmDialogOpenChange = useCallback((open: boolean) => {
+  const handleConfirmDialogOpenChange = (open: boolean) => {
     if (!open) {
       pendingSinglePhaseValueRef.current = null;
     }
     setShowConfirmDialog(open);
-  }, []);
-
-  const conditionPath = useMemo(() => {
-    if (
-      phaseIndex === undefined ||
-      selectedRewardIndex === undefined ||
-      selectedConditionIndex === undefined
-    ) {
-      return undefined;
-    }
-
-    return `phases.${phaseIndex}.rewards.${selectedRewardIndex}.qualifyConditions.${selectedConditionIndex}` satisfies Path<PromotionFormData>;
-  }, [phaseIndex, selectedRewardIndex, selectedConditionIndex]);
-
-  const conditionServerData = useMemo(() => {
-    if (
-      !initialData ||
-      phaseIndex === undefined ||
-      selectedRewardIndex === undefined ||
-      selectedConditionIndex === undefined
-    ) {
-      return undefined;
-    }
-
-    return initialData.phases?.[phaseIndex]?.rewards?.[selectedRewardIndex]
-      ?.qualifyConditions?.[selectedConditionIndex];
-  }, [initialData, phaseIndex, selectedRewardIndex, selectedConditionIndex]);
-
-  const selectedRewardServerData = useMemo(() => {
-    if (
-      !initialData ||
-      phaseIndex === undefined ||
-      selectedRewardIndex === undefined
-    ) {
-      return undefined;
-    }
-
-    return initialData.phases?.[phaseIndex]?.rewards?.[selectedRewardIndex];
-  }, [initialData, phaseIndex, selectedRewardIndex]);
-
-  const depositRegistrationContext = useMemo(() => {
-    if (
-      !initialData?.id ||
-      !selectedRewardServerData?.id
-    ) {
-      return undefined;
-    }
-
-    return {
-      promotionId: initialData.id,
-      phaseId: selectedRewardServerData.phaseId,
-      rewardId: selectedRewardServerData.id,
-      bookmakerAccountId: initialData.bookmakerAccountId,
-    };
-  }, [
-    initialData?.bookmakerAccountId,
-    initialData?.id,
-    selectedRewardServerData?.id,
-    selectedRewardServerData?.phaseId,
-  ]);
+  };
 
   const onFormSubmit = (data: PromotionFormData) => {
     const processedData = normalizePromotionSubmitData(data);
     onSubmit?.(processedData);
   };
 
-  const shouldShowTabs = !isSinglePhase && phasesFieldArray.fields.length > 1;
   const activePhaseIndex = Math.min(
     phaseIndex,
     Math.max(phasesFieldArray.fields.length - 1, 0)
@@ -244,21 +193,11 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
         />
 
         {isSinglePhase && (
-          <div className="mt-6 border-t pt-6">
-            <PhaseForm
-              phaseIndex={0}
-              isSimplified
-              isEditing={isEditing}
-              onRewardSelect={handleRewardSelect}
-              onQualifyConditionSelect={handleQualifyConditionSelect}
-              availableQualifyConditions={
-                initialData?.availableQualifyConditions
-              }
-              anchorCatalog={anchorCatalog}
-              anchorOccurrences={anchorOccurrences}
-              phaseServerData={initialData?.phases?.[0]}
-            />
-          </div>
+          <SinglePhaseRewardsSection
+            initialData={initialData}
+            promotionId={promotionId}
+            anchorOccurrences={anchorOccurrences}
+          />
         )}
       </div>
 
@@ -271,67 +210,24 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
             </Button>
           </div>
 
-          <div className="space-y-4">
-            {shouldShowTabs ? (
-              <Tabs
-                value={activePhaseIndex.toString()}
-                onValueChange={handlePhaseTabChange}
-              >
-                <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
-                  {phasesFieldArray.fields.map((_, index) => (
-                    <TabsTrigger key={index} value={index.toString()}>
-                      Fase {index + 1}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                {phasesFieldArray.fields.map((field, index) => (
-                  <TabsContent key={field.id} value={index.toString()}>
-                    <PhaseForm
-                      phaseIndex={index}
-                      onRemove={
-                        canRemovePhase(index)
-                          ? () => removePhase(index)
-                          : undefined
-                      }
-                      removeDisabledReason={getPhaseRemoveDisabledReason(index)}
-                      isEditing={isEditing}
-                      onRewardSelect={handleRewardSelect}
-                      onQualifyConditionSelect={handleQualifyConditionSelect}
-                      availableQualifyConditions={
-                        initialData?.availableQualifyConditions
-                      }
-                      anchorCatalog={anchorCatalog}
-                      anchorOccurrences={anchorOccurrences}
-                      phaseServerData={initialData?.phases?.[index]}
-                    />
-                  </TabsContent>
-                ))}
-              </Tabs>
-            ) : (
-              phasesFieldArray.fields.map((field, index) => (
-                <div key={field.id}>
-                  <PhaseForm
-                    phaseIndex={index}
-                    onRemove={
-                      canRemovePhase(index)
-                        ? () => removePhase(index)
-                        : undefined
-                    }
-                    removeDisabledReason={getPhaseRemoveDisabledReason(index)}
-                    isEditing={isEditing}
-                    onRewardSelect={handleRewardSelect}
-                    onQualifyConditionSelect={handleQualifyConditionSelect}
-                    availableQualifyConditions={
-                      initialData?.availableQualifyConditions
-                    }
-                    anchorCatalog={anchorCatalog}
-                    anchorOccurrences={anchorOccurrences}
-                    phaseServerData={initialData?.phases?.[index]}
-                  />
-                </div>
-              ))
-            )}
+          <div className="space-y-5">
+            {phasesFieldArray.fields.map((field, index) => (
+              <div key={field.id} className="rounded-lg border bg-card p-4">
+                <PhaseForm
+                  phaseIndex={index}
+                  onRemove={
+                    canRemovePhase(index)
+                      ? () => removePhase(index)
+                      : undefined
+                  }
+                  removeDisabledReason={getPhaseRemoveDisabledReason(index)}
+                  anchorCatalog={anchorCatalog}
+                  anchorOccurrences={anchorOccurrences}
+                  phaseServerData={initialData?.phases?.[index]}
+                  promotionId={promotionId}
+                />
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -356,15 +252,6 @@ const PromotionFormContent: React.FC<PromotionFormProps> = ({
         onConfirm={handleConfirmToggle}
       />
 
-      {conditionPath && conditionServerData?.type === "DEPOSIT" && (
-        <DepositQualifyModal
-          isOpen={isDepositModalOpen}
-          onClose={closeDepositModal}
-          conditionPath={conditionPath}
-          conditionServerData={conditionServerData}
-          registrationContext={depositRegistrationContext}
-        />
-      )}
     </form>
   );
 };

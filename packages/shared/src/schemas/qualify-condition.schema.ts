@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { QualifyConditionStatusSchema, CashbackCalculationMethodSchema } from './enums';
 import { requiredInteger, requiredNumber } from './utils';
-import { TimeframeSchema } from './timeframe.schema';
+import { BoundedTimeframeSchema } from './timeframe.schema';
 import { PaginationInputSchema } from './pagination.schema';
 import {
   OddsRestrictionSchema,
@@ -112,7 +112,7 @@ const BaseQualifyConditionSchema = z.object({
   description: z.string().nullish(),
   status: QualifyConditionStatusSchema.optional(),
   statusDate: z.date(), // Nueva propiedad para tracking histórico
-  timeframe: TimeframeSchema,
+  timeframe: BoundedTimeframeSchema,
 }).refine((value) => Boolean(value.id || value.clientId), {
   message: 'QualifyCondition requires id or clientId',
   path: ['id'],

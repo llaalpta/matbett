@@ -37,7 +37,7 @@ export function QualifyConditionPickerDialog({
         <DialogHeader>
           <DialogTitle>Seleccionar condición existente</DialogTitle>
           <DialogDescription>
-            Reutiliza una qualify condition ya registrada en esta promoción.
+            Reutiliza una condición de calificación ya registrada en esta promoción.
           </DialogDescription>
         </DialogHeader>
 

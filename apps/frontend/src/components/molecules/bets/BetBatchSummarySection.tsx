@@ -1,43 +1,35 @@
 "use client";
 
-import { InputField, SelectField } from "@/components/atoms";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBetBatchSummaryLogic } from "@/hooks/domain/bets/useBetBatchSummaryLogic";
-import type { BetBatchFormValues } from "@/hooks/useBetBatchForm";
+import { getBetScenarioLabel } from "@/utils/bets";
 
 import { BetBatchScenarioOutcomeTable } from "./summary/BetBatchScenarioOutcomeTable";
 
 export function BetBatchSummarySection() {
-  const { scenarioOutcomeSummary, targetOptions, mainLeg, hedge1Leg } =
-    useBetBatchSummaryLogic();
+  const {
+    scenarioOutcomeSummary,
+    scenarioId,
+    shouldShowSummary,
+    mainLeg,
+    hedge1Leg,
+  } = useBetBatchSummaryLogic();
+
+  if (!shouldShowSummary) {
+    return null;
+  }
+
+  const scenarioLabel = getBetScenarioLabel(scenarioId);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Resumen y cálculo</CardTitle>
-        <CardDescription>
-          En matched betting simple, BACK representa la apuesta principal y LAY
-          la cobertura en exchange. El stake total se muestra como turnover real.
-        </CardDescription>
+    <Card className="min-w-0 max-w-full gap-0 overflow-hidden rounded-lg py-0 shadow-none">
+      <CardHeader className="border-b bg-muted/20 px-3 py-2">
+        <CardTitle className="text-sm">Cálculo estimado</CardTitle>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {scenarioLabel}
+        </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {targetOptions.length > 0 ? (
-          <SelectField<BetBatchFormValues>
-            name="calculation.target.participationKey"
-            label="Participación objetivo"
-            options={targetOptions.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
-          />
-        ) : null}
-
+      <CardContent className="p-3">
         {scenarioOutcomeSummary ? (
           <BetBatchScenarioOutcomeTable
             summary={scenarioOutcomeSummary}
@@ -45,42 +37,6 @@ export function BetBatchSummarySection() {
             hedge1Leg={hedge1Leg}
           />
         ) : null}
-
-        <div
-          className={
-            scenarioOutcomeSummary
-              ? "grid gap-4 md:grid-cols-1"
-              : "grid gap-4 md:grid-cols-2 xl:grid-cols-4"
-          }
-        >
-          <InputField<BetBatchFormValues>
-            name="calculation.scenarioId"
-            label="Scenario ID"
-            disabled
-          />
-          {!scenarioOutcomeSummary ? (
-            <>
-              <InputField<BetBatchFormValues>
-                name="profit"
-                label="Profit total"
-                type="number"
-                disabled
-              />
-              <InputField<BetBatchFormValues>
-                name="risk"
-                label="Risk total"
-                type="number"
-                disabled
-              />
-              <InputField<BetBatchFormValues>
-                name="yield"
-                label="Yield total"
-                type="number"
-                disabled
-              />
-            </>
-          ) : null}
-        </div>
       </CardContent>
     </Card>
   );

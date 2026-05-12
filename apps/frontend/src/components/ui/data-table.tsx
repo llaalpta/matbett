@@ -39,6 +39,8 @@ type DataTableProps<TData> = {
   renderExpandedRow?: (row: Row<TData>) => ReactNode;
   className?: string;
   tableClassName?: string;
+  showFooter?: boolean;
+  variant?: "default" | "embedded";
 };
 
 export function DataTable<TData>({
@@ -59,6 +61,8 @@ export function DataTable<TData>({
   renderExpandedRow,
   className,
   tableClassName,
+  showFooter = true,
+  variant = "default",
 }: DataTableProps<TData>) {
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
@@ -138,7 +142,12 @@ export function DataTable<TData>({
     <div className={cn("space-y-2.5", className)}>
       {toolbar}
 
-      <div className="bg-card overflow-hidden rounded-lg border">
+      <div
+        className={cn(
+          "bg-card overflow-hidden border",
+          variant === "default" ? "rounded-lg" : "rounded-md"
+        )}
+      >
         <div className="overflow-x-auto">
           <table className={cn("min-w-full border-collapse text-[13px]", tableClassName)}>
             <thead className="bg-muted/40">
@@ -245,7 +254,8 @@ export function DataTable<TData>({
           </table>
         </div>
 
-        <div className="bg-card flex flex-col gap-2.5 border-t px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        {showFooter ? (
+          <div className="bg-card flex flex-col gap-2.5 border-t px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-muted-foreground text-xs">
             Mostrando {data.length} de {rowCount ?? data.length} registros
           </div>
@@ -349,7 +359,8 @@ export function DataTable<TData>({
               </Button>
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

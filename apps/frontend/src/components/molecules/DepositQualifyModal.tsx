@@ -29,7 +29,7 @@ interface DepositQualifyModalProps<T extends FieldValues> {
 }
 
 /**
- * Generic modal for deposit qualify conditions
+ * Generic modal for deposit qualification conditions
  * Works in both PromotionForm (nested) and RewardStandaloneForm (standalone) contexts
  * @template T - Form data type from FormProvider context (PromotionFormData or RewardFormData)
  */
@@ -123,7 +123,7 @@ export function DepositQualifyModal<T extends FieldValues = FieldValues>({
           onClose={() => {
             setIsRegisterModalOpen(false);
           }}
-          title="Registrar deposito para qualify condition"
+          title="Registrar depósito para condición"
           context={contextualRegistration}
           qualifyCondition={conditionData}
         />

@@ -27,10 +27,16 @@ export const TimeframeAnchorRefSchema = z.object({
   event: AnchorEventSchema,
 });
 
-export const AbsoluteTimeframeSchema = z.object({
+export const BoundedAbsoluteTimeframeSchema = z.object({
   mode: z.literal('ABSOLUTE'),
   start: jsonDate(),
   end: jsonDate(),
+});
+
+export const AbsoluteTimeframeSchema = z.object({
+  mode: z.literal('ABSOLUTE'),
+  start: jsonDate(),
+  end: jsonDate().nullable().optional(),
 });
 
 export const RelativeTimeframeSchema = z.object({
@@ -45,6 +51,12 @@ export const PromotionTimeframeSchema = z.object({
 
 export const TimeframeSchema = z.discriminatedUnion('mode', [
   AbsoluteTimeframeSchema,
+  RelativeTimeframeSchema,
+  PromotionTimeframeSchema,
+]);
+
+export const BoundedTimeframeSchema = z.discriminatedUnion('mode', [
+  BoundedAbsoluteTimeframeSchema,
   RelativeTimeframeSchema,
   PromotionTimeframeSchema,
 ]);
@@ -148,10 +160,12 @@ export const AnchorOccurrencesSchema = z.array(AnchorOccurrenceSchema);
 export type AnchorEvent = z.infer<typeof AnchorEventSchema>;
 export type AnchorRefType = z.infer<typeof AnchorRefTypeSchema>;
 export type TimeframeAnchorRef = z.infer<typeof TimeframeAnchorRefSchema>;
+export type BoundedAbsoluteTimeframe = z.infer<typeof BoundedAbsoluteTimeframeSchema>;
 export type AbsoluteTimeframe = z.infer<typeof AbsoluteTimeframeSchema>;
 export type RelativeTimeframe = z.infer<typeof RelativeTimeframeSchema>;
 export type PromotionTimeframe = z.infer<typeof PromotionTimeframeSchema>;
 export type Timeframe = z.infer<typeof TimeframeSchema>;
+export type BoundedTimeframe = z.infer<typeof BoundedTimeframeSchema>;
 export type AnchorCatalogEvent = z.infer<typeof AnchorCatalogEventSchema>;
 export type AnchorCatalogEntity = z.infer<typeof AnchorCatalogEntitySchema>;
 export type AnchorCatalogByType = z.infer<typeof AnchorCatalogByTypeSchema>;

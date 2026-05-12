@@ -85,6 +85,7 @@ export function CheckboxField<
                 disabled={disabled}
                 required={required}
                 aria-required={required}
+                aria-label={label}
               />
             </FormControl>
             <div className="space-y-1 leading-none">

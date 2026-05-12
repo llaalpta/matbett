@@ -161,28 +161,28 @@ export const mergeAnchorCatalogs = ({
   if (mergedPromotion.length > 0) {
     result.push({
       entityType: "PROMOTION",
-      entityTypeLabel: "Promotion",
+      entityTypeLabel: "Promociones",
       entities: mergedPromotion,
     });
   }
   if (mergedPhase.length > 0) {
     result.push({
       entityType: "PHASE",
-      entityTypeLabel: "Phases",
+      entityTypeLabel: "Fases",
       entities: mergedPhase,
     });
   }
   if (mergedReward.length > 0) {
     result.push({
       entityType: "REWARD",
-      entityTypeLabel: "Rewards",
+      entityTypeLabel: "Recompensas",
       entities: mergedReward,
     });
   }
   if (mergedQualify.length > 0) {
     result.push({
       entityType: "QUALIFY_CONDITION",
-      entityTypeLabel: "Qualify Conditions",
+      entityTypeLabel: "Condiciones de calificación",
       entities: mergedQualify,
     });
   }
@@ -222,7 +222,7 @@ export const buildRewardDraftAnchorCatalog = (
     qualifyEntities.push({
       entityRefType: qcRef.entityRefType,
       entityRef: qcRef.entityRef,
-      entityLabel: qc.description || `${qc.type} Condition`,
+      entityLabel: qc.description || `${qc.type} condición`,
       events: qualifyConditionAnchorEventOptions.map((option) => ({
         event: option.value,
         eventLabel: option.label,
@@ -234,14 +234,14 @@ export const buildRewardDraftAnchorCatalog = (
   if (rewardEntities.length > 0) {
     draftCatalog.push({
       entityType: "REWARD",
-      entityTypeLabel: "Rewards",
+      entityTypeLabel: "Recompensas",
       entities: rewardEntities,
     });
   }
   if (qualifyEntities.length > 0) {
     draftCatalog.push({
       entityType: "QUALIFY_CONDITION",
-      entityTypeLabel: "Qualify Conditions",
+      entityTypeLabel: "Condiciones de calificación",
       entities: qualifyEntities,
     });
   }
@@ -263,7 +263,7 @@ export const buildQualifyConditionDraftAnchorCatalog = (
   return [
     {
       entityType: "QUALIFY_CONDITION",
-      entityTypeLabel: "Qualify Conditions",
+      entityTypeLabel: "Condiciones de calificación",
       entities: [
         {
           entityRefType: qualifyRef.entityRefType,

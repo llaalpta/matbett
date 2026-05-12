@@ -20,7 +20,7 @@ export default function NewBetFromRewardPage() {
     useBetNewFromRewardContext(rewardId);
 
   if (isLoading) {
-    return <div className="container mx-auto p-6">Cargando contexto de reward...</div>;
+    return <div className="container mx-auto p-6">Cargando contexto de recompensa...</div>;
   }
 
   if (isError) {
@@ -28,10 +28,10 @@ export default function NewBetFromRewardPage() {
       <div className="container mx-auto p-6">
         <CenteredErrorState
           error={error}
-          fallbackMessage="No se pudo cargar el contexto de la reward."
+          fallbackMessage="No se pudo cargar el contexto de la recompensa."
           onRetry={retry}
           backHref={`/rewards/${rewardId}`}
-          backLabel="Volver a la reward"
+          backLabel="Volver a la recompensa"
         />
       </div>
     );
@@ -42,10 +42,10 @@ export default function NewBetFromRewardPage() {
       <div className="container mx-auto p-6">
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>No se puede precargar esta reward</CardTitle>
+            <CardTitle>No se puede precargar esta recompensa</CardTitle>
             <CardDescription>
               {unavailableReason ??
-                "El contexto de esta reward no está disponible para registrar apuestas."}
+                "El contexto de esta recompensa no está disponible para registrar apuestas."}
             </CardDescription>
           </CardHeader>
           <CardContent />
@@ -58,7 +58,7 @@ export default function NewBetFromRewardPage() {
     <BetNewPageContent
       initialContext={initialContext}
       backHref={`/rewards/${rewardId}`}
-      backLabel="Volver a la reward"
+      backLabel="Volver a la recompensa"
     />
   );
 }

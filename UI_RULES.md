@@ -30,12 +30,26 @@ The UI must feel:
 
 This is a finance/ops tool. It is not a marketing product.
 
+## Terminology
+
+- Use `recompensa` and `recompensas` in user-facing Spanish UI copy for the
+  concept represented by the technical `Reward` model.
+- Use `condición de calificación` and `condiciones` in user-facing Spanish UI
+  copy for the concept represented by the technical `QualifyCondition` model.
+- Keep `Reward`, `rewards`, `/rewards`, `QualifyCondition`,
+  `qualify-conditions`, `QUALIFY_TRACKING`, and similar technical names for code
+  identifiers, schemas, imports, routes, payloads, and implementation
+  references.
+- Do not use `QC`, `QCs`, or `QT` as primary visible UI copy. Prefer
+  `Condiciones`, `Condición`, `Calificación`, or `Tracking de calificación`
+  depending on context.
+
 ## Navigation Rules
 
 - Use a stable app shell with a primary navigation area visible on desktop.
 - Group related sections visually; do not flatten every section into one row of
   equal links.
-- Keep `Promotions`, `Rewards`, and `Qualify Conditions` as independent
+- Keep promotions, recompensas, and condiciones de calificación as independent
   sections, but group them under the same parent area in navigation.
 - Show the current section through a clear active state.
 - Keep the current section title and primary page actions near the top of the
@@ -87,7 +101,7 @@ This is a finance/ops tool. It is not a marketing product.
 - Disabled actions should remain visible and explain the primary blocking reason
   without long inline prose.
 - Expandable subrows are appropriate for related operational records such as
-  bets or deposits under a reward, qualify condition, or promotion.
+  bets or deposits under a recompensa, condición de calificación, or promotion.
 - If an expanded row contains only one related dataset, render the subtable
   directly without wrapping it in an extra card/panel.
 - Keep vertical dividers subtle and subject to visual re-evaluation; do not
@@ -177,18 +191,27 @@ Keep these meanings stable across entities.
 
 - `Bets`:
   - default list shape is a flat table of registered legs
-  - emphasize placed date, promotional context, reward role, status, stake,
+  - emphasize placed date, promotional context, reward/recompensa role, status, stake,
     odds, bookmaker account, settled balance, and actions
   - theoretical profit, risk, and yield belong in batch/detail review unless
     specifically needed for the flat list
+  - in the bet operation form, `profit`, `risk`, and `yield` are estimated
+    readonly metrics; render them as tabular text, not editable-looking inputs
+  - `Cálculo estimado` should appear only when a coverage scenario makes outcome
+    comparison useful, and should focus on possible outcomes instead of
+    duplicating the editable leg table
   - aggregated batch review lives in `/bets/batches`
-- `Qualify Conditions`:
-  - list should prioritize timeframe, parent promotion/reward, condition type,
+- `Qualify Conditions` / condiciones de calificación:
+  - list should prioritize timeframe, parent promotion/recompensa, condition type,
     condition details, status, progress, related records, and contextual actions
-- `Rewards`:
+- `Rewards` / recompensas:
   - list should prioritize parent promotion/phase, type, state, value,
-    qualification deadline/progress, usage deadline/progress, balance, and
-    expandable related records
+    qualification deadline/progress, usage deadline/progress, compact usage
+    state, balance, and actions
+  - related bets/deposits belong in the reward detail, not as an expandable
+    table inside the rewards index
+  - detail should show summary, qualification conditions, usage, and related
+    activity before the collapsed definition-editing form
 - `Promotions`:
   - list should prioritize timeframe, name, bookmaker account, status, reward
     count, related bets/deposits, real stake, balance, yield, and expandable

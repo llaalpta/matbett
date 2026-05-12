@@ -68,13 +68,13 @@ const navigationGroups: NavigationGroup[] = [
       {
         href: "/rewards",
         label: "Recompensas",
-        shortLabel: "Rewards",
+        shortLabel: "Recompensas",
         icon: Gift,
       },
       {
         href: "/qualify-conditions",
         label: "Condiciones de calificación",
-        shortLabel: "QC",
+        shortLabel: "Condiciones",
         icon: ShieldCheck,
       },
     ],

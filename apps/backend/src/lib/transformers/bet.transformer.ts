@@ -68,7 +68,7 @@ export function toBetBatchCreateInput(
     userId,
     strategyKind: input.strategy.kind,
     strategyType: input.strategy.kind === 'HEDGE' ? input.strategy.strategyType : null,
-    lineMode: input.strategy.kind === 'HEDGE' ? input.strategy.lineMode : null,
+    lineMode: input.operation.lineMode,
     mode: input.strategy.kind === 'HEDGE' ? input.strategy.mode : null,
     dutchingOptionsCount:
       input.strategy.kind === 'HEDGE' ? input.strategy.dutchingOptionsCount ?? null : null,
@@ -89,7 +89,7 @@ export function toBetBatchUpdateInput(
   return {
     strategyKind: input.strategy.kind,
     strategyType: input.strategy.kind === 'HEDGE' ? input.strategy.strategyType : null,
-    lineMode: input.strategy.kind === 'HEDGE' ? input.strategy.lineMode : null,
+    lineMode: input.operation.lineMode,
     mode: input.strategy.kind === 'HEDGE' ? input.strategy.mode : null,
     dutchingOptionsCount:
       input.strategy.kind === 'HEDGE' ? input.strategy.dutchingOptionsCount ?? null : null,
@@ -249,6 +249,7 @@ export function toBetBatchUpdateDiff(
 export function toBetBatchEntity(batch: BetBatchWithRelations): BetRegistrationBatch {
   return BetRegistrationBatchSchema.parse({
     id: batch.id,
+    operation: toOperationContext(batch),
     strategy: toStrategyContext(batch),
     scenarioId: batch.scenarioId ?? undefined,
     calculationParticipationId: batch.calculationParticipationId ?? undefined,
@@ -268,6 +269,7 @@ export function toBetBatchEntity(batch: BetBatchWithRelations): BetRegistrationB
 export function toBetBatchSummary(batch: BetBatchWithRelations): BetBatchSummary {
   return {
     id: batch.id,
+    operation: toOperationContext(batch),
     strategy: toStrategyContext(batch),
     scenarioId: batch.scenarioId ? ScenarioIdSchema.parse(batch.scenarioId) : undefined,
     calculationParticipationId: batch.calculationParticipationId ?? undefined,
@@ -285,6 +287,7 @@ export function toBetBatchSummary(batch: BetBatchWithRelations): BetBatchSummary
 export function toBetListItem(bet: BetWithRelations): BetListItem {
   return {
     ...toBetEntity(bet),
+    operation: toOperationContext(bet.batch),
     strategy: toStrategyContext(bet.batch),
     scenarioId: bet.batch.scenarioId ? ScenarioIdSchema.parse(bet.batch.scenarioId) : undefined,
     events: parseBatchEvents(bet.batch.events),
@@ -496,6 +499,14 @@ function toStrategyContext(
     hedgeAdjustmentType: batch.hedgeAdjustmentType
       ? HedgeAdjustmentTypeSchema.parse(batch.hedgeAdjustmentType)
       : undefined,
+  };
+}
+
+function toOperationContext(
+  batch: Pick<BetBatchWithRelations, 'lineMode'>,
+) {
+  return {
+    lineMode: batch.lineMode ? BetLineModeSchema.parse(batch.lineMode) : 'SINGLE',
   };
 }
 

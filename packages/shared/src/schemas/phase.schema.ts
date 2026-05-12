@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 import { PhaseStatusSchema, ActivationMethodSchema } from './enums';
-import { TimeframeSchema } from './timeframe.schema';
+import { BoundedTimeframeSchema } from './timeframe.schema';
 import { RewardSchema, RewardEntitySchema } from './reward.schema';
 
 // =============================================
@@ -48,8 +48,8 @@ export const PhaseSchema = z.object({
   statusDate: z.date(),
 
   activationMethod: ActivationMethodSchema,
-  timeframe: TimeframeSchema,
-  rewards: z.array(RewardSchema).min(1),
+  timeframe: BoundedTimeframeSchema,
+  rewards: z.array(RewardSchema).min(0),
 }).refine((value) => Boolean(value.id || value.clientId), {
   message: 'Phase requires id or clientId',
   path: ['id'],
@@ -70,7 +70,7 @@ export const PhaseEntitySchema = PhaseSchema
     canDelete: z.boolean(),
     totalBalance: z.number(),
     // Sobrescribir con EntitySchemas (que incluyen tracking)
-    rewards: z.array(RewardEntitySchema).min(1),
+    rewards: z.array(RewardEntitySchema).min(0),
     ...PhaseStateTimestampsSchema.shape,
     ...AuditTimestampsSchema.shape,
   });

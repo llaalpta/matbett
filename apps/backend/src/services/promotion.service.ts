@@ -47,9 +47,20 @@ function compareNullableDates(
   left: Date | null | undefined,
   right: Date | null | undefined,
   direction: 'asc' | 'desc',
+  options: { nullsLast?: boolean } = {},
 ) {
   if (!left && !right) {
     return 0;
+  }
+
+  if (options.nullsLast) {
+    if (!left) {
+      return 1;
+    }
+
+    if (!right) {
+      return -1;
+    }
   }
 
   if (!left) {
@@ -220,60 +231,9 @@ export class PromotionService implements IPromotionService {
       }
     }
 
-    for (const existingPhase of existing.phases) {
-      const incomingPhase = incoming.phases.find(
-        (phase) => phase.id === existingPhase.id
-      );
-      if (!incomingPhase) {
-        continue;
-      }
-
-      const incomingRewardIds = new Set(
-        incomingPhase.rewards.map((reward) => reward.id).filter(Boolean)
-      );
-      const removedRewards = existingPhase.rewards.filter(
-        (reward) => !incomingRewardIds.has(reward.id)
-      );
-
-      for (const reward of removedRewards) {
-        if (reward.qualifyConditions.length > 0) {
-          throw new BadRequestError(
-            `Cannot remove reward "${reward.id}" because it still has qualify conditions. Remove child qualify conditions first.`
-          );
-        }
-      }
-    }
-
-    const incomingConditionIds = new Set<string>();
-    for (const condition of incoming.availableQualifyConditions) {
-      if (condition.id) {
-        incomingConditionIds.add(condition.id);
-      }
-    }
-    for (const phase of incoming.phases) {
-      for (const reward of phase.rewards) {
-        for (const condition of reward.qualifyConditions) {
-          if (condition.id) {
-            incomingConditionIds.add(condition.id);
-          }
-        }
-      }
-    }
-
-    const removedConditions = existing.availableQualifyConditions.filter(
-      (condition) => !incomingConditionIds.has(condition.id)
-    );
-
-    for (const condition of removedConditions) {
-      const hasUsage = (condition._count.rewards ?? 0) > 0;
-      const hasTracking = (condition._count.depositParticipations ?? 0) > 0 || (condition._count.betParticipations ?? 0) > 0;
-
-      if (hasUsage || hasTracking) {
-        throw new BadRequestError(
-          `Cannot remove qualify condition "${condition.id}" because it still has dependencies.`
-        );
-      }
-    }
+    // Promotion updates no longer own rewards or qualify conditions. Those
+    // entities are managed through their contextual services, so absence from
+    // the promotion form payload must not be interpreted as deletion.
   }
 
   /**
@@ -417,6 +377,7 @@ export class PromotionService implements IPromotionService {
           sortId === 'timeframeStart' ? left.timeframeStart : left.timeframeEnd,
           sortId === 'timeframeStart' ? right.timeframeStart : right.timeframeEnd,
           sortDirection,
+          { nullsLast: sortId === 'timeframeEnd' },
         ),
       );
     }

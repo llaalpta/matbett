@@ -20,7 +20,7 @@ export default function NewBetFromQualifyConditionPage() {
     useBetNewFromQualifyConditionContext(qualifyConditionId);
 
   if (isLoading) {
-    return <div className="container mx-auto p-6">Cargando contexto de qualify condition...</div>;
+    return <div className="container mx-auto p-6">Cargando contexto de condición...</div>;
   }
 
   if (isError) {
@@ -28,10 +28,10 @@ export default function NewBetFromQualifyConditionPage() {
       <div className="container mx-auto p-6">
         <CenteredErrorState
           error={error}
-          fallbackMessage="No se pudo cargar el contexto de la qualify condition."
+          fallbackMessage="No se pudo cargar el contexto de la condición."
           onRetry={retry}
           backHref={`/qualify-conditions/${qualifyConditionId}`}
-          backLabel="Volver a la qualify condition"
+          backLabel="Volver a la condición"
         />
       </div>
     );
@@ -42,10 +42,10 @@ export default function NewBetFromQualifyConditionPage() {
       <div className="container mx-auto p-6">
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>No se puede precargar esta qualify condition</CardTitle>
+            <CardTitle>No se puede precargar esta condición</CardTitle>
             <CardDescription>
               {unavailableReason ??
-                "El contexto de esta qualify condition no está disponible para registrar apuestas."}
+                "El contexto de esta condición no está disponible para registrar apuestas."}
             </CardDescription>
           </CardHeader>
           <CardContent />
@@ -58,7 +58,7 @@ export default function NewBetFromQualifyConditionPage() {
     <BetNewPageContent
       initialContext={initialContext}
       backHref={`/qualify-conditions/${qualifyConditionId}`}
-      backLabel="Volver a la qualify condition"
+      backLabel="Volver a la condición"
     />
   );
 }

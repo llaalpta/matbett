@@ -66,6 +66,10 @@ function hasOpenRewards(rewards: PhaseLifecyclePolicyInput['rewards']) {
   );
 }
 
+function hasAnyReward(rewards: PhaseLifecyclePolicyInput['rewards']) {
+  return (rewards ?? []).length > 0;
+}
+
 function areRewardsInitial(rewards: PhaseLifecyclePolicyInput['rewards']) {
   return (rewards ?? []).every(
     (reward) =>
@@ -79,6 +83,15 @@ function buildPhaseStatusOptionReasons(
   input: PhaseLifecyclePolicyInput,
 ): LifecycleReason[] {
   const reasons: LifecycleReason[] = [];
+  const hasRewards = hasAnyReward(input.rewards);
+
+  if (status !== 'NOT_STARTED' && !hasRewards) {
+    reasons.push({
+      code: 'no_rewards',
+      message:
+        'La phase sin rewards solo puede permanecer en estado No iniciada.',
+    });
+  }
 
   switch (status) {
     case 'NOT_STARTED':

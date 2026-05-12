@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { useBookmakerAccounts } from "@/hooks/api/useBookmakerAccounts";
 import { useCreatePromotion } from "@/hooks/api/usePromotions";
 import { useApiErrorMessage } from "@/hooks/useApiErrorMessage";
@@ -36,9 +37,9 @@ export default function NewPromotionPage() {
   const handleSubmit = async (data: PromotionFormData) => {
     clearApiError();
     try {
-      await createPromotion.mutateAsync(data);
+      const created = await createPromotion.mutateAsync(data);
       notifySuccess("Promocion creada.");
-      router.push("/promotions");
+      router.push(`/promotions/${created.id}`);
     } catch (error) {
       setApiError(error, "No se pudo crear la promocion.");
     }
@@ -90,12 +91,18 @@ export default function NewPromotionPage() {
 
   return (
     <div className="container mx-auto space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold">Registrar Promocion</h1>
-        <p className="mt-1 text-muted-foreground">
-          Crea una nueva promocion con todas sus recompensas y condiciones.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Promociones"
+        title="Registrar promoción"
+        description="Crea una promoción borrador con una fase inicial. Añade recompensas y condiciones desde el detalle después de guardar."
+        actions={
+          <Link href="/promotions">
+            <Button variant="outline" size="sm">
+              Volver a promociones
+            </Button>
+          </Link>
+        }
+      />
 
       <PromotionForm
         apiErrorMessage={apiErrorMessage}

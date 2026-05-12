@@ -91,11 +91,13 @@ function buildBetBatchCalculationTargetOptions(
   legs: BetBatchFormValues["legs"]
 ): BetBatchCalculationTargetOption[] {
   return legs.flatMap((leg, legIndex) =>
-    (leg.participations ?? []).map((participation, participationIndex) => ({
-      value: participation.participationKey,
-      label: `${leg.legRole ?? `LEG ${legIndex + 1}`} · ${participation.kind} · ${participation.rewardType} · ${participationIndex + 1}`,
-      participation,
-    }))
+    (leg.participations ?? [])
+      .filter((participation) => participation.contributesToTracking)
+      .map((participation, participationIndex) => ({
+        value: participation.participationKey,
+        label: `${leg.legRole ?? `LEG ${legIndex + 1}`} · ${participation.kind} · ${participation.rewardType} · ${participationIndex + 1}`,
+        participation,
+      }))
   );
 }
 
@@ -118,6 +120,7 @@ function resolveBetBatchCalculationTargetValue(
 }
 
 function resolveBetBatchScenarioId(
+  operation: BetBatchFormValues["operation"],
   strategy: BetBatchFormValues["strategy"],
   targetOption: BetBatchCalculationTargetOption | undefined,
   targetOptions: readonly BetBatchCalculationTargetOption[]
@@ -132,7 +135,7 @@ function resolveBetBatchScenarioId(
 
   return getScenarioId({
     strategyType: strategy.strategyType,
-    lineMode: strategy.lineMode,
+    lineMode: operation.lineMode ?? "SINGLE",
     mode: strategy.mode,
     dutchingOptionsCount: strategy.dutchingOptionsCount,
     hedgeAdjustmentType: strategy.hedgeAdjustmentType,
@@ -181,6 +184,50 @@ function emptyLegValues(): CalculatedLegValues {
     risk: 0,
     yield: 0,
   };
+}
+
+function calculateStandaloneLegValues(leg: BatchLeg): CalculatedLegValues {
+  const stake = typeof leg.stake === "number" && leg.stake > 0 ? leg.stake : 0;
+  const odds = typeof leg.odds === "number" && leg.odds > 0 ? leg.odds : 0;
+  const commission =
+    typeof leg.commission === "number" && leg.commission > 0
+      ? leg.commission
+      : 0;
+  const risk = stake > 0 ? -stake : 0;
+  const profit =
+    stake > 0 && odds > 0
+      ? roundToCents((odds - 1) * stake * (1 - commission / 100))
+      : 0;
+
+  return {
+    stake,
+    profit,
+    risk,
+    yield: calculateYield(profit, risk),
+  };
+}
+
+function syncLegCalculatedValues(args: {
+  form: ReturnType<typeof useFormContext<BetBatchFormValues>>;
+  legIndex: number;
+  currentLeg: BatchLeg | undefined;
+  nextValues: CalculatedLegValues;
+  syncStake?: boolean;
+}) {
+  const { form, legIndex, currentLeg, nextValues, syncStake = false } = args;
+
+  if (syncStake && !areNumbersEqual(currentLeg?.stake, nextValues.stake)) {
+    form.setValue(`legs.${legIndex}.stake`, nextValues.stake);
+  }
+  if (!areNumbersEqual(currentLeg?.profit, nextValues.profit)) {
+    form.setValue(`legs.${legIndex}.profit`, nextValues.profit);
+  }
+  if (!areNumbersEqual(currentLeg?.risk, nextValues.risk)) {
+    form.setValue(`legs.${legIndex}.risk`, nextValues.risk);
+  }
+  if (!areNumbersEqual(currentLeg?.yield, nextValues.yield)) {
+    form.setValue(`legs.${legIndex}.yield`, nextValues.yield);
+  }
 }
 
 function calculateSuggestedHedgeStake(args: {
@@ -507,6 +554,7 @@ function calculateBetBatchTotals(args: {
 export function useBetBatchSummaryLogic() {
   const form = useFormContext<BetBatchFormValues>();
   const strategy = useWatch({ control: form.control, name: "strategy" });
+  const operation = useWatch({ control: form.control, name: "operation" });
   const watchedLegs = useWatch({ control: form.control, name: "legs" });
   const legs = useMemo(() => watchedLegs ?? [], [watchedLegs]);
   const currentTarget = useWatch({
@@ -546,8 +594,8 @@ export function useBetBatchSummaryLogic() {
       ? targetReward.typeSpecificFields.retentionRate
       : undefined;
   const nextScenarioId = useMemo(
-    () => resolveBetBatchScenarioId(strategy, targetOption, targetOptions),
-    [strategy, targetOption, targetOptions]
+    () => resolveBetBatchScenarioId(operation, strategy, targetOption, targetOptions),
+    [operation, strategy, targetOption, targetOptions]
   );
   const calculationContext = useMemo(
     () =>
@@ -602,6 +650,14 @@ export function useBetBatchSummaryLogic() {
     }
 
     if (!calculationContext) {
+      legs.forEach((leg, legIndex) => {
+        syncLegCalculatedValues({
+          form,
+          legIndex,
+          currentLeg: leg,
+          nextValues: calculateStandaloneLegValues(leg),
+        });
+      });
       lastSuggestedHedgeStakeRef.current = undefined;
       isManualHedgeStakeRef.current = false;
       lastUpstreamSignatureRef.current = undefined;
@@ -612,30 +668,24 @@ export function useBetBatchSummaryLogic() {
     const main = legs[mainIndex];
     const hedge1 = legs[hedge1Index];
 
-    if (!areNumbersEqual(main?.profit, result.main.profit)) {
-      form.setValue(`legs.${mainIndex}.profit`, result.main.profit);
-    }
-    if (!areNumbersEqual(main?.risk, result.main.risk)) {
-      form.setValue(`legs.${mainIndex}.risk`, result.main.risk);
-    }
-    if (!areNumbersEqual(main?.yield, result.main.yield)) {
-      form.setValue(`legs.${mainIndex}.yield`, result.main.yield);
-    }
+    syncLegCalculatedValues({
+      form,
+      legIndex: mainIndex,
+      currentLeg: main,
+      nextValues: result.main,
+    });
     if (
       !calculationContext.isManualHedgeStake &&
       !areNumbersEqual(hedge1?.stake, result.hedge1.stake)
     ) {
       form.setValue(`legs.${hedge1Index}.stake`, result.hedge1.stake);
     }
-    if (!areNumbersEqual(hedge1?.profit, result.hedge1.profit)) {
-      form.setValue(`legs.${hedge1Index}.profit`, result.hedge1.profit);
-    }
-    if (!areNumbersEqual(hedge1?.risk, result.hedge1.risk)) {
-      form.setValue(`legs.${hedge1Index}.risk`, result.hedge1.risk);
-    }
-    if (!areNumbersEqual(hedge1?.yield, result.hedge1.yield)) {
-      form.setValue(`legs.${hedge1Index}.yield`, result.hedge1.yield);
-    }
+    syncLegCalculatedValues({
+      form,
+      legIndex: hedge1Index,
+      currentLeg: hedge1,
+      nextValues: result.hedge1,
+    });
 
     lastSuggestedHedgeStakeRef.current = calculationContext.suggestedHedgeStake;
     isManualHedgeStakeRef.current = calculationContext.isManualHedgeStake;
@@ -644,6 +694,9 @@ export function useBetBatchSummaryLogic() {
 
   return {
     scenarioOutcomeSummary,
+    totals,
+    scenarioId: nextScenarioId,
+    shouldShowSummary: scenarioOutcomeSummary !== undefined,
     targetOptions,
     mainLeg,
     hedge1Leg,

@@ -13,7 +13,7 @@ import {
   QualifyConditionStatusSchema,
   PromotionStatusSchema,
   PhaseStatusSchema,
-  TimeframeSchema,
+  BoundedTimeframeSchema,
   DepositConditionsSchema,
   BetConditionsSpecificSchema,
   LossesCashbackConditionsSchema,
@@ -190,7 +190,7 @@ function extractUsageConditions(
 
 // Helper para reconstruir entidad de condicion de calificacion
 export function toQualifyConditionEntity(prismaCondition: PrismaQualifyConditionWithCounts): QualifyConditionEntity {
-  const timeframe = TimeframeSchema.parse(prismaCondition.timeframe);
+  const timeframe = BoundedTimeframeSchema.parse(prismaCondition.timeframe);
   const hasRewards = (prismaCondition._count?.rewards ?? 0) > 0;
   const hasDeposits = (prismaCondition._count?.depositParticipations ?? 0) > 0;
   const hasBets = (prismaCondition._count?.betParticipations ?? 0) > 0;

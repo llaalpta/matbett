@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 
 import { FormLabel } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface FormFieldLabelProps {
   label: string;
@@ -24,7 +25,12 @@ export function FormFieldLabel({
   className,
 }: FormFieldLabelProps) {
   return (
-    <FormLabel className={className ?? "flex items-center gap-1.5 text-sm font-medium"}>
+    <FormLabel
+      className={cn(
+        "inline-flex min-h-4 items-center gap-1.5 leading-none",
+        className ?? "text-sm font-medium"
+      )}
+    >
       {label}
       {required && (
         <span className="text-destructive" aria-label="obligatorio">
@@ -34,7 +40,9 @@ export function FormFieldLabel({
       {tooltip && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+            <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+              <Info className="text-muted-foreground h-3 w-3 cursor-help" />
+            </span>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-xs">
             <p>{tooltip}</p>

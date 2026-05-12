@@ -1,26 +1,84 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import {
+  getLabel,
+  getRewardNextQualifyDeadline,
+  phaseStatusOptions,
+  promotionStatusOptions,
+  resolveTimeframeWindow,
+  rewardStatusOptions,
+  rewardTypeOptions,
+} from "@matbett/shared";
+import { ArrowLeft, ChevronDown, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 
-import { BetEntryLauncherCard } from "@/components/molecules/bets/BetEntryLauncherCard";
+import { RewardQualifyConditionsTable } from "@/components/molecules/rewards/RewardQualifyConditionsTable";
+import { RewardRelatedActivitySection } from "@/components/molecules/rewards/RewardRelatedActivitySection";
+import { RewardUsageSection } from "@/components/molecules/rewards/RewardUsageSection";
 import { RewardStandaloneForm } from "@/components/organisms/RewardStandaloneForm";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { DetailGrid, DetailRow } from "@/components/ui/detail-grid";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { usePromotion } from "@/hooks/api/usePromotions";
 import { useReward } from "@/hooks/api/useRewards";
 import { useRewardAccessLogic } from "@/hooks/domain/rewards/useRewardAccessLogic";
+import { formatCurrencyAmount, formatDate } from "@/utils/formatters";
+import { getRewardQualifySummary, getRewardUsageSummary } from "@/utils/rewards";
+import { getCompactStatusLabel } from "@/utils/statusLabels";
+
+function formatQualifyDeadline(
+  reward: NonNullable<ReturnType<typeof useReward>["data"]>,
+  promotion: NonNullable<ReturnType<typeof usePromotion>["data"]> | undefined
+) {
+  const deadline = getRewardNextQualifyDeadline(reward, promotion);
+
+  if (deadline.state === "date" && deadline.date) {
+    return formatDate(deadline.date);
+  }
+
+  if (deadline.state === "no_qc") {
+    return "Sin condiciones";
+  }
+
+  if (deadline.state === "closed") {
+    return "Cerrada";
+  }
+
+  if (deadline.state === "open_ended") {
+    return "Sin fecha de fin";
+  }
+
+  return "Sin resolver";
+}
+
+function formatUsageDeadline(
+  reward: NonNullable<ReturnType<typeof useReward>["data"]>,
+  promotion: NonNullable<ReturnType<typeof usePromotion>["data"]> | undefined
+) {
+  const usageWindow = resolveTimeframeWindow(
+    reward.usageConditions.timeframe,
+    promotion
+  );
+
+  if (!usageWindow.resolved) {
+    return "Sin resolver";
+  }
+
+  return usageWindow.end ? formatDate(usageWindow.end) : "Sin fecha de fin";
+}
 
 export default function RewardDetailPage() {
   const params = useParams<{ id: string }>();
   const rewardId = params.id;
+  const [isEditingDefinition, setIsEditingDefinition] = useState(false);
   const { data: reward } = useReward(rewardId);
   const { data: promotion } = usePromotion(reward?.promotionId);
   const phase = promotion?.phases.find((item) => item.id === reward?.phaseId);
@@ -36,106 +94,185 @@ export default function RewardDetailPage() {
     phaseId: reward?.phaseId,
   });
 
+  const qualifySummary = reward ? getRewardQualifySummary(reward) : undefined;
+  const usageSummary = reward ? getRewardUsageSummary(reward) : undefined;
+
   return (
-    <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-center gap-3">
-        <Link href="/rewards">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
-          </Button>
-        </Link>
-        <h1 className="text-2xl font-semibold">Editar Reward</h1>
-      </div>
+    <div className="container mx-auto space-y-5 p-6">
+      <PageHeader
+        eyebrow="Recompensas"
+        title="Detalle de recompensa"
+        description="Revisa el contexto, condiciones, uso y actividad antes de editar la definición."
+        actions={
+          <>
+            <Link href="/rewards">
+              <Button variant="outline" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Volver a recompensas
+              </Button>
+            </Link>
+            {promotion?.id ? (
+              <Link href={`/promotions/${promotion.id}`}>
+                <Button variant="ghost" size="sm">
+                  Ver promoción
+                </Button>
+              </Link>
+            ) : null}
+          </>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Contexto de la reward</CardTitle>
-          <CardDescription>
-            Esta reward pertenece a una promoción y a una fase concretas. Ese
-            contexto determina qué se puede editar y cuándo puede registrarse su
-            tracking de uso.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Promoción</p>
-              <p className="text-sm text-muted-foreground">
-                {promotion?.name ?? "No disponible"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Estado: {promotion?.status ?? "No disponible"}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Fase</p>
-              <p className="text-sm text-muted-foreground">
-                {phase?.name ?? "No disponible"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Estado: {phase?.status ?? "No disponible"}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Cuenta asociada</p>
-              <p className="text-sm text-muted-foreground">
-                {promotion?.bookmaker ?? "No disponible"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {promotion?.bookmakerAccountIdentifier ??
-                  "Sin identificador visible"}
-              </p>
-            </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Navegación</p>
-            <div className="flex flex-wrap gap-2">
-                {promotion?.id ? (
-                  <Link href={`/promotions/${promotion.id}`}>
-                    <Button variant="outline" size="sm">
-                      Ver promoción
-                    </Button>
-                </Link>
-              ) : null}
-                {reward?.id && rewardAccess.isStructureEditable ? (
-                  <Link href={`/qualify-conditions/new/from-reward/${reward.id}`}>
-                    <Button variant="outline" size="sm">
-                      Añadir qualify condition
-                    </Button>
-                  </Link>
-                ) : reward?.id ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled
-                    title={rewardAccess.structureLockedReason}
-                  >
-                    Añadir qualify condition
-                  </Button>
-                ) : null}
-                {reward?.promotionId ? (
-                  <Link href="/rewards">
-                    <Button variant="ghost" size="sm">
-                      Ir al listado de rewards
-                    </Button>
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <section className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-semibold">Resumen operativo</h2>
+          {reward?.status ? (
+            <StatusBadge
+              status={reward.status}
+              label={getCompactStatusLabel(
+                reward.status,
+                getLabel(rewardStatusOptions, reward.status)
+              )}
+              title={getLabel(rewardStatusOptions, reward.status)}
+            />
+          ) : null}
+        </div>
 
-      {rewardAccess.canLaunchBetEntry ? (
-        <BetEntryLauncherCard
-          title="Registro contextual de apuestas"
-          description="Abre el formulario de bets para intentar usar esta reward con un contexto precargado."
-          actionLabel="Usar esta reward"
-          href={`/bets/new/from-reward/${rewardId}`}
-          disabledReason={rewardAccess.betEntryDisabledReason}
+        <DetailGrid className="rounded-md border bg-card p-4">
+          <DetailRow
+            label="Promoción"
+            value={promotion?.name ?? "No disponible"}
+          />
+          <DetailRow
+            label="Fase"
+            value={phase?.name ?? reward?.phaseName ?? "No disponible"}
+          />
+          <DetailRow
+            label="Tipo"
+            value={
+              reward?.type ? getLabel(rewardTypeOptions, reward.type) : "No disponible"
+            }
+          />
+          <DetailRow
+            label="Valor"
+            value={formatCurrencyAmount(reward?.value ?? 0)}
+            valueClassName="tabular-nums"
+          />
+          <DetailRow
+            label="Calificación hasta"
+            value={reward ? formatQualifyDeadline(reward, promotion ?? undefined) : "No disponible"}
+          />
+          <DetailRow
+            label="Condiciones"
+            value={qualifySummary?.primary ?? "No disponible"}
+          />
+          <DetailRow
+            label="Uso hasta"
+            value={reward ? formatUsageDeadline(reward, promotion ?? undefined) : "No disponible"}
+          />
+          <DetailRow
+            label="Uso"
+            value={usageSummary?.primary ?? "No disponible"}
+          />
+          <DetailRow
+            label="Balance"
+            value={formatCurrencyAmount(reward?.totalBalance ?? 0)}
+            valueClassName="tabular-nums"
+          />
+          <DetailRow
+            label="Casa"
+            value={promotion?.bookmaker ?? "No disponible"}
+          />
+          <DetailRow
+            label="Cuenta"
+            value={
+              promotion?.bookmakerAccountIdentifier ?? "Sin identificador visible"
+            }
+          />
+          <DetailRow
+            label="Estado promoción"
+            value={
+              promotion?.status ? (
+                <StatusBadge
+                  status={promotion.status}
+                  label={getCompactStatusLabel(
+                    promotion.status,
+                    getLabel(promotionStatusOptions, promotion.status)
+                  )}
+                  title={getLabel(promotionStatusOptions, promotion.status)}
+                />
+              ) : (
+                "No disponible"
+              )
+            }
+          />
+          <DetailRow
+            label="Estado fase"
+            value={
+              phase?.status ? (
+                <StatusBadge
+                  status={phase.status}
+                  label={getCompactStatusLabel(
+                    phase.status,
+                    getLabel(phaseStatusOptions, phase.status)
+                  )}
+                  title={getLabel(phaseStatusOptions, phase.status)}
+                />
+              ) : (
+                "No disponible"
+              )
+            }
+          />
+        </DetailGrid>
+      </section>
+
+      {reward ? (
+        <RewardQualifyConditionsTable
+          reward={reward}
+          canAdd={rewardAccess.isStructureEditable}
+          disabledReason={rewardAccess.structureLockedReason}
         />
       ) : null}
-      <RewardStandaloneForm rewardId={rewardId} />
+
+      {reward ? (
+        <RewardUsageSection
+          reward={reward}
+          canLaunchBetEntry={rewardAccess.canLaunchBetEntry}
+          betEntryHref={`/bets/new/from-reward/${rewardId}`}
+          betEntryDisabledReason={rewardAccess.betEntryDisabledReason}
+        />
+      ) : null}
+
+      {reward ? <RewardRelatedActivitySection rewardId={reward.id} /> : null}
+
+      <Collapsible
+        open={isEditingDefinition}
+        onOpenChange={setIsEditingDefinition}
+        className="rounded-md border bg-card"
+      >
+        <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold">Editar definición</h2>
+            <p className="text-muted-foreground text-sm">
+              Modifica configuración, estado y condiciones de uso cuando las reglas de ciclo lo permitan.
+            </p>
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="outline" size="sm">
+              <Pencil className="mr-2 h-4 w-4" />
+              {isEditingDefinition ? "Ocultar edición" : "Editar definición"}
+              <ChevronDown
+                className={[
+                  "ml-2 h-4 w-4 transition-transform",
+                  isEditingDefinition ? "rotate-180" : "",
+                ].join(" ")}
+              />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent className="border-t px-4 py-4">
+          <RewardStandaloneForm rewardId={rewardId} />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

@@ -37,6 +37,7 @@ interface SelectFieldProps<
   control?: Control<TFieldValues>;
   name: TName;
   label?: string;
+  labelClassName?: string;
   placeholder?: string;
   tooltip?: string; // Texto que aparece en el tooltip al hacer hover sobre el ícono (?)
   options: readonly SelectOption[];
@@ -56,6 +57,7 @@ export function SelectField<
   control, // Puede ser undefined
   name,
   label,
+  labelClassName,
   placeholder,
   tooltip,
   options,
@@ -68,13 +70,19 @@ export function SelectField<
   displayError = false,
 }: SelectFieldProps<TFieldValues, TName>) {
   const sizeClasses = {
-    sm: "h-8",
-    md: "h-9",
-    lg: "h-10",
+    sm: "h-8 min-h-8 px-2 py-0 text-xs",
+    md: "h-9 min-h-9 py-0",
+    lg: "h-10 min-h-10 py-0",
   };
 
   return (
-    <div className={cn("min-w-0 space-y-2", containerClassName)}>
+    <div
+      className={cn(
+        "min-w-0",
+        size === "sm" ? "space-y-1" : "space-y-2",
+        containerClassName
+      )}
+    >
       <FormField
         // Si control es undefined, React Hook Form busca el contexto automáticamente
         control={control}
@@ -95,6 +103,7 @@ export function SelectField<
                   label={label}
                   required={required}
                   tooltip={tooltip}
+                  className={labelClassName}
                 />
               )}
               <Select
@@ -106,11 +115,13 @@ export function SelectField<
                 value={field.value ?? ""}
                 disabled={disabled}
                 required={required}
+                aria-label={label}
               >
                 <FormControl>
                   <SelectTrigger
                     aria-required={required}
                     data-visual-state={visualState}
+                    size={size === "sm" ? "sm" : "default"}
                     className={cn(
                       sizeClasses[size],
                       "bg-background w-full rounded-md"

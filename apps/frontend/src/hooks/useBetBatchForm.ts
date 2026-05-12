@@ -125,6 +125,9 @@ function buildBetBatchEditorDefaults(
       : undefined;
 
     return {
+      operation: {
+        lineMode: "SINGLE",
+      },
       strategy: { kind: "NONE" },
       calculation: contextualParticipation
         ? {
@@ -152,6 +155,7 @@ function buildBetBatchEditorDefaults(
   }
 
   return {
+    operation: initialData.operation,
     strategy: initialData.strategy,
     calculation: initialData.calculationParticipationId
       ? {
@@ -230,14 +234,14 @@ function buildSelections(
     ];
   }
 
-  if (role === "MAIN") {
+  if (role === "MAIN" || role === undefined) {
     return Array.from({ length: eventCount }, (_, eventIndex) => {
       const selection = byEventIndex.get(eventIndex);
 
       return {
         eventIndex,
         selection: selection?.selection ?? "",
-        odds: selection?.odds,
+        odds: isCombined ? selection?.odds : undefined,
       };
     });
   }

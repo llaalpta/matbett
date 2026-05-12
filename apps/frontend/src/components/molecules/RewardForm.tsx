@@ -1,29 +1,28 @@
 "use client";
 
-import { QualifyConditionSchema } from "@matbett/shared";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Path, useFormContext, useWatch } from "react-hook-form";
 
-import { useRemovedAnchorRefs } from "@/hooks/domain/anchors/useRemovedAnchorRefs";
-import { useQualifyConditionAccessLogic } from "@/hooks/domain/qualifyConditions/useQualifyConditionAccessLogic";
 import { useRewardAccessLogic } from "@/hooks/domain/rewards/useRewardAccessLogic";
 import {
   usePromotionRewardLogic,
   useStandaloneRewardLogic,
 } from "@/hooks/domain/rewards/useRewardLogic";
-import { usePromotionRewardStatusDateSync } from "@/hooks/useStatusDateSync";
-import { useStandaloneRewardStatusDateSync } from "@/hooks/useStatusDateSync";
+import {
+  usePromotionRewardStatusDateSync,
+  useStandaloneRewardStatusDateSync,
+} from "@/hooks/useStatusDateSync";
 import type {
   PromotionFormData,
   PromotionServerModel,
   RewardFormData,
+  RewardQualifyConditionServerModel,
 } from "@/types/hooks";
 import {
   buildRewardDraftAnchorCatalog,
   mergeAnchorCatalogs,
 } from "@/utils/anchorCatalog";
 
-import { DepositQualifyModal } from "./DepositQualifyModal";
 import {
   buildPromotionRewardPaths,
   buildRewardStandalonePaths,
@@ -34,12 +33,22 @@ import {
   type RewardFormSharedProps,
 } from "./RewardFormBase";
 
-const getConditionId = (value: unknown): string | undefined => {
-  if (typeof value !== "object" || value === null || !("id" in value)) {
-    return undefined;
+const getDepositRequiredForAnalysis = (
+  conditions: RewardQualifyConditionServerModel[] | undefined
+) => {
+  for (const condition of conditions ?? []) {
+    if (condition.type !== "DEPOSIT") {
+      continue;
+    }
+    if ("targetAmount" in condition.conditions) {
+      return condition.conditions.targetAmount ?? undefined;
+    }
+    if ("minAmount" in condition.conditions) {
+      return condition.conditions.minAmount ?? undefined;
+    }
   }
-  const id = value.id;
-  return typeof id === "string" ? id : undefined;
+
+  return undefined;
 };
 
 export function RewardForm({
@@ -47,23 +56,15 @@ export function RewardForm({
   onRemove,
   canRemove,
   removeDisabledReason,
-  isEditing,
-  onQualifyConditionSelect,
   rewardServerData,
   anchorCatalog,
   anchorOccurrences,
-  availableQualifyConditions,
 }: RewardFormSharedProps & { fieldPath: PromotionRewardPath }) {
   const { control, setValue } = useFormContext<PromotionFormData>();
   const p = (value: Path<PromotionFormData>) => value;
 
-  const { paths, qualifyConditionsPath: _qualifyConditionsPath, usagePaths, getQualifyConditionPaths } =
+  const { paths, qualifyConditionsPath, usagePaths } =
     buildPromotionRewardPaths(fieldPath, p);
-
-  const selectableQualifyConditions = availableQualifyConditions?.filter(
-    (condition): condition is typeof condition & { id: string } =>
-      typeof condition?.id === "string" && condition.id.length > 0
-  );
 
   const usageTypeRaw = useWatch({
     control,
@@ -89,6 +90,10 @@ export function RewardForm({
     control,
     name: paths.claimMethod,
   });
+  const currentRewardValue = useWatch({
+    control,
+    name: paths.value,
+  });
   const promotionStatus = useWatch({
     control,
     name: "status",
@@ -111,32 +116,10 @@ export function RewardForm({
   const {
     rewardType,
     valueType,
-    qualifyConditions,
     qualifyConditionsValues,
     handleTypeChange,
     handleValueTypeChange,
-    rewardHasContributingCondition,
-    addQualifyCondition,
-    handleQualifyConditionTypeChange,
-    appendQualifyCondition,
-    removeQualifyCondition,
-    getQualifyConditionRemoveDisabledReason,
-    canRemoveQualifyCondition,
   } = usePromotionRewardLogic(paths, rewardServerData);
-
-  const handleAddExistingQualifyCondition = useCallback(
-    (conditionId: string) => {
-      const condition = availableQualifyConditions?.find(
-        (item) => item.id === conditionId
-      );
-      if (!condition) {
-        return;
-      }
-      const parsedCondition = QualifyConditionSchema.parse(condition);
-      appendQualifyCondition(parsedCondition);
-    },
-    [appendQualifyCondition, availableQualifyConditions]
-  );
 
   usePromotionRewardStatusDateSync({
     control,
@@ -178,109 +161,54 @@ export function RewardForm({
   return (
     <RewardFormBase<
       PromotionFormData,
-      typeof _qualifyConditionsPath,
+      typeof qualifyConditionsPath,
       typeof paths
     >
       paths={paths}
-      getQualifyConditionPaths={getQualifyConditionPaths}
       usagePaths={usagePaths}
       rewardType={typeof rewardType === "string" ? rewardType : undefined}
       valueType={typeof valueType === "string" ? valueType : undefined}
       usageType={usageType}
-      qualifyConditions={qualifyConditions}
-      qualifyConditionsValues={qualifyConditionsValues}
       onTypeChange={handleTypeChange}
       onValueTypeChange={handleValueTypeChange}
-      onAddQualifyCondition={addQualifyCondition}
-      onRemoveQualifyCondition={removeQualifyCondition}
-      onQualifyConditionTypeChange={handleQualifyConditionTypeChange}
-      getQualifyConditionRemoveDisabledReason={getQualifyConditionRemoveDisabledReason}
-      canRemoveQualifyCondition={canRemoveQualifyCondition}
-      rewardHasContributingCondition={rewardHasContributingCondition}
       onRemove={onRemove}
       canRemove={canRemove}
       removeDisabledReason={removeDisabledReason}
-      isEditing={isEditing}
-      onQualifyConditionSelect={onQualifyConditionSelect}
-      availableQualifyConditions={selectableQualifyConditions}
-      onAddExistingQualifyCondition={handleAddExistingQualifyCondition}
-      rewardServerData={rewardServerData}
-      promotion={null}
       anchorCatalog={anchorCatalog}
       anchorOccurrences={anchorOccurrences}
-      promotionTimeframe={promotionTimeframe}
       isRewardDefinitionReadOnly={!rewardAccess.isStructureEditable}
       rewardDefinitionReadOnlyReason={rewardAccess.structureLockedReason}
-      areQualifyConditionsReadOnly={!rewardAccess.isStructureEditable}
-      qualifyConditionsReadOnlyReason={rewardAccess.structureLockedReason}
       isUsageConditionsReadOnly={!rewardAccess.isStructureEditable}
       usageConditionsReadOnlyReason={rewardAccess.structureLockedReason}
       rewardStatusOptions={rewardAccess.statusOptions}
       rewardWarnings={rewardAccess.warnings}
-      promotionStatus={
-        typeof promotionStatus === "string" ? promotionStatus : undefined
+      rewardValueForAnalysis={
+        typeof currentRewardValue === "number" ? currentRewardValue : undefined
       }
-      phaseStatus={typeof phaseStatus === "string" ? phaseStatus : undefined}
-      showBetEntryLauncher={rewardAccess.canLaunchBetEntry}
-      rewardBetEntryHref={
-        rewardAccess.canLaunchBetEntry &&
-        typeof currentRewardId === "string" &&
-        currentRewardId.length > 0
-          ? `/bets/new/from-reward/${currentRewardId}`
-          : undefined
-      }
-      rewardBetEntryDisabledReason={rewardAccess.betEntryDisabledReason}
+      depositRequiredForAnalysis={getDepositRequiredForAnalysis(
+        rewardServerData?.qualifyConditions
+      )}
     />
   );
 }
 
 export function StandaloneRewardFormFields({
-  isEditing,
+  isEditing: _isEditing,
   rewardServerData,
   anchorCatalog,
   anchorOccurrences,
-  availableQualifyConditions,
-  onQualifyConditionSelect,
   promotionData,
 }: Omit<RewardFormSharedProps, "onRemove" | "canRemove"> & {
   promotionData?: PromotionServerModel;
 }) {
   const { control, setValue } = useFormContext<RewardFormData>();
   const p = (value: Path<RewardFormData>) => value;
-  const { paths, qualifyConditionsPath: _qualifyConditionsPath, usagePaths, getQualifyConditionPaths } =
+  const { paths, qualifyConditionsPath, usagePaths } =
     buildRewardStandalonePaths(p);
-
-  const [selectedConditionIndex, setSelectedConditionIndex] = useState<number>();
-  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
-  const { removedAnchorRefs, markRemoved, unmarkRemoved } = useRemovedAnchorRefs();
-
-  const closeDepositModal = useCallback(() => {
-    setIsDepositModalOpen(false);
-  }, []);
 
   const currentReward = useWatch({
     control,
   });
-
-  const draftAnchorCatalog = useMemo(
-    () =>
-      buildRewardDraftAnchorCatalog(
-        currentReward,
-        `Reward - ${currentReward?.type ?? "UNKNOWN"}`
-      ),
-    [currentReward]
-  );
-
-  const effectiveAnchorCatalog = useMemo(
-    () =>
-      mergeAnchorCatalogs({
-        serverCatalog: anchorCatalog,
-        draftCatalog: draftAnchorCatalog,
-        removedRefs: removedAnchorRefs,
-      }),
-    [anchorCatalog, draftAnchorCatalog, removedAnchorRefs]
-  );
-
   const usageTypeRaw = useWatch({
     control,
     name: paths.usageConditionsType,
@@ -301,67 +229,36 @@ export function StandaloneRewardFormFields({
     control,
     name: paths.claimMethod,
   });
+  const currentRewardValue = useWatch({
+    control,
+    name: paths.value,
+  });
 
+  const draftAnchorCatalog = useMemo(
+    () =>
+      buildRewardDraftAnchorCatalog(
+        currentReward,
+        `Recompensa - ${currentReward?.type ?? "UNKNOWN"}`
+      ),
+    [currentReward]
+  );
+  const effectiveAnchorCatalog = useMemo(
+    () =>
+      mergeAnchorCatalogs({
+        serverCatalog: anchorCatalog,
+        draftCatalog: draftAnchorCatalog,
+      }),
+    [anchorCatalog, draftAnchorCatalog]
+  );
   const usageType = typeof usageTypeRaw === "string" ? usageTypeRaw : undefined;
 
   const {
     rewardType,
     valueType,
-    qualifyConditions,
     qualifyConditionsValues,
     handleTypeChange,
     handleValueTypeChange,
-    rewardHasContributingCondition,
-    addQualifyCondition,
-    handleQualifyConditionTypeChange,
-    appendQualifyCondition,
-    removeQualifyCondition,
-    getQualifyConditionRemoveDisabledReason,
-    canRemoveQualifyCondition,
   } = useStandaloneRewardLogic(paths, rewardServerData);
-
-  const handleQualifyConditionSelect = useCallback(
-    (_: string, index: number) => {
-      const persistedConditionId = getConditionId(
-        qualifyConditionsValues?.[index]
-      );
-      if (persistedConditionId && onQualifyConditionSelect) {
-        onQualifyConditionSelect(persistedConditionId, index);
-        return;
-      }
-      setSelectedConditionIndex(index);
-      setIsDepositModalOpen(true);
-    },
-    [onQualifyConditionSelect, qualifyConditionsValues]
-  );
-
-  const handleAddExistingQualifyCondition = useCallback(
-    (conditionId: string) => {
-      const condition = availableQualifyConditions?.find(
-        (item) => item.id === conditionId
-      );
-      if (!condition) {
-        return;
-      }
-      const parsedCondition = QualifyConditionSchema.parse(condition);
-      appendQualifyCondition(parsedCondition);
-      unmarkRemoved("QUALIFY_CONDITION", conditionId);
-    },
-    [appendQualifyCondition, availableQualifyConditions, unmarkRemoved]
-  );
-
-  const handleRemoveQualifyCondition = useCallback(
-    (index: number) => {
-      const persistedConditionId = getConditionId(
-        qualifyConditionsValues?.[index]
-      );
-      if (typeof persistedConditionId === "string") {
-        markRemoved("QUALIFY_CONDITION", persistedConditionId);
-      }
-      removeQualifyCondition(index);
-    },
-    [markRemoved, qualifyConditionsValues, removeQualifyCondition]
-  );
 
   useStandaloneRewardStatusDateSync({
     control,
@@ -380,40 +277,6 @@ export function StandaloneRewardFormFields({
         }
       : undefined,
   });
-
-  const conditionPath =
-    selectedConditionIndex !== undefined
-      ? (`qualifyConditions.${selectedConditionIndex}` satisfies Path<RewardFormData>)
-      : undefined;
-
-  const conditionServerData =
-    selectedConditionIndex !== undefined
-      ? rewardServerData?.qualifyConditions?.[selectedConditionIndex]
-      : undefined;
-  const selectedConditionAccess = useQualifyConditionAccessLogic({
-    isPersisted: Boolean(conditionServerData?.id),
-    conditionId: conditionServerData?.id,
-    conditionType: conditionServerData?.type,
-    conditionStatus: conditionServerData?.status,
-    promotion: promotionData ?? null,
-    rewardStatus:
-      typeof currentRewardStatus === "string" ? currentRewardStatus : undefined,
-    timeframe: conditionServerData?.timeframe,
-    promotionTimeframe: promotionData?.timeframe,
-    anchorOccurrences,
-  });
-
-  const depositRegistrationContext = useMemo(() => {
-    if (!rewardServerData?.id || !rewardServerData.promotionId) {
-      return undefined;
-    }
-
-    return {
-      promotionId: rewardServerData.promotionId,
-      phaseId: rewardServerData.phaseId,
-      rewardId: rewardServerData.id,
-    };
-  }, [rewardServerData?.id, rewardServerData?.phaseId, rewardServerData?.promotionId]);
 
   const rewardAccess = useRewardAccessLogic({
     isPersisted:
@@ -434,70 +297,35 @@ export function StandaloneRewardFormFields({
   });
 
   return (
-    <>
-      <RewardFormBase<
-        RewardFormData,
-        typeof _qualifyConditionsPath,
-        typeof paths
-      >
-        paths={paths}
-        getQualifyConditionPaths={getQualifyConditionPaths}
-        usagePaths={usagePaths}
-        rewardType={typeof rewardType === "string" ? rewardType : undefined}
-        valueType={typeof valueType === "string" ? valueType : undefined}
-        usageType={usageType}
-        qualifyConditions={qualifyConditions}
-        qualifyConditionsValues={qualifyConditionsValues}
-        onTypeChange={handleTypeChange}
-        onValueTypeChange={handleValueTypeChange}
-        onAddQualifyCondition={addQualifyCondition}
-        onRemoveQualifyCondition={handleRemoveQualifyCondition}
-        onQualifyConditionTypeChange={handleQualifyConditionTypeChange}
-        getQualifyConditionRemoveDisabledReason={getQualifyConditionRemoveDisabledReason}
-        canRemoveQualifyCondition={canRemoveQualifyCondition}
-        rewardHasContributingCondition={rewardHasContributingCondition}
-        onRemove={() => {}}
-        canRemove={false}
-        removeDisabledReason={undefined}
-        isEditing={isEditing}
-        onQualifyConditionSelect={handleQualifyConditionSelect}
-        enableQualifyConditionDirectOpen={Boolean(onQualifyConditionSelect)}
-        availableQualifyConditions={availableQualifyConditions}
-        onAddExistingQualifyCondition={handleAddExistingQualifyCondition}
-        rewardServerData={rewardServerData}
-        promotion={promotionData ?? null}
-        anchorCatalog={effectiveAnchorCatalog}
-        anchorOccurrences={anchorOccurrences}
-        promotionTimeframe={promotionData?.timeframe}
-        isRewardDefinitionReadOnly={!rewardAccess.isStructureEditable}
-        rewardDefinitionReadOnlyReason={rewardAccess.structureLockedReason}
-        areQualifyConditionsReadOnly={!rewardAccess.isStructureEditable}
-        qualifyConditionsReadOnlyReason={rewardAccess.structureLockedReason}
-        isUsageConditionsReadOnly={!rewardAccess.isStructureEditable}
-        usageConditionsReadOnlyReason={rewardAccess.structureLockedReason}
-        rewardStatusOptions={rewardAccess.statusOptions}
-        rewardWarnings={rewardAccess.warnings}
-        promotionStatus={promotionData?.status}
-        phaseStatus={
-          promotionData?.phases.find((phase) => phase.id === rewardServerData?.phaseId)
-            ?.status
-        }
-        showBetEntryLauncher={false}
-      />
-
-      {conditionPath && conditionServerData?.type === "DEPOSIT" && (
-        <DepositQualifyModal
-          isOpen={isDepositModalOpen}
-          onClose={closeDepositModal}
-          conditionPath={conditionPath}
-          conditionServerData={conditionServerData}
-          registrationContext={depositRegistrationContext}
-          canRegisterDeposit={selectedConditionAccess.canRegisterTrackingAction}
-          registerDepositDisabledReason={
-            selectedConditionAccess.trackingActionDisabledReason
-          }
-        />
+    <RewardFormBase<
+      RewardFormData,
+      typeof qualifyConditionsPath,
+      typeof paths
+    >
+      paths={paths}
+      usagePaths={usagePaths}
+      rewardType={typeof rewardType === "string" ? rewardType : undefined}
+      valueType={typeof valueType === "string" ? valueType : undefined}
+      usageType={usageType}
+      onTypeChange={handleTypeChange}
+      onValueTypeChange={handleValueTypeChange}
+      onRemove={() => {}}
+      canRemove={false}
+      removeDisabledReason={undefined}
+      anchorCatalog={effectiveAnchorCatalog}
+      anchorOccurrences={anchorOccurrences}
+      isRewardDefinitionReadOnly={!rewardAccess.isStructureEditable}
+      rewardDefinitionReadOnlyReason={rewardAccess.structureLockedReason}
+      isUsageConditionsReadOnly={!rewardAccess.isStructureEditable}
+      usageConditionsReadOnlyReason={rewardAccess.structureLockedReason}
+      rewardStatusOptions={rewardAccess.statusOptions}
+      rewardWarnings={rewardAccess.warnings}
+      rewardValueForAnalysis={
+        typeof currentRewardValue === "number" ? currentRewardValue : undefined
+      }
+      depositRequiredForAnalysis={getDepositRequiredForAnalysis(
+        rewardServerData?.qualifyConditions
       )}
-    </>
+    />
   );
 }

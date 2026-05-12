@@ -70,10 +70,10 @@ const registerAnchorRef = (
   }
 };
 
-const resolveTimeframeAnchors = (
-  timeframe: Timeframe,
+const resolveTimeframeAnchors = <TTimeframe extends Timeframe>(
+  timeframe: TTimeframe,
   refMap: Map<string, string>
-): Timeframe => {
+): TTimeframe => {
   if (timeframe.mode !== 'RELATIVE') {
     return timeframe;
   }
@@ -102,7 +102,7 @@ const resolveTimeframeAnchors = (
       entityRefType: persistedRefType,
       entityRef: resolvedRef,
     },
-  };
+  } as TTimeframe;
 };
 
 const resolveUsageConditionsAnchors = (

@@ -39,7 +39,7 @@ export function getRewardQualifySummary(reward: RewardEntity) {
   return {
     primary:
       reward.qualifyConditions.length === 0
-        ? "Sin QC"
+        ? "Sin condiciones"
         : `${fulfilledCount}/${reward.qualifyConditions.length}`,
     secondary: undefined,
   };
@@ -51,35 +51,51 @@ export function getRewardUsageSummary(reward: RewardEntity): {
 } {
   if (!reward.usageTracking) {
     return {
-      primary: "Sin acciones registradas",
+      primary: "Sin uso",
     };
   }
 
   switch (reward.usageTracking.type) {
-    case "FREEBET":
+    case "FREEBET": {
+      const hasUsage = reward.usageTracking.totalUsed > 0;
+      const isCompleted = hasUsage && reward.usageTracking.remainingBalance <= 0;
+
       return {
-        primary: `${formatCurrencyAmount(reward.usageTracking.totalUsed)} usado · ${formatCurrencyAmount(reward.usageTracking.remainingBalance)} restante`,
+        primary: isCompleted ? "Uso completo" : hasUsage ? "Uso parcial" : "Sin uso",
       };
-    case "BET_BONUS_ROLLOVER":
+    }
+    case "BET_BONUS_ROLLOVER": {
+      const hasProgress = reward.usageTracking.rolloverProgress > 0;
+      const isCompleted = hasProgress && reward.usageTracking.remainingRollover <= 0;
+
       return {
-        primary: `${formatCurrencyAmount(reward.usageTracking.rolloverProgress)} rollover · ${formatCurrencyAmount(reward.usageTracking.remainingRollover)} restante`,
+        primary: isCompleted
+          ? "Rollover completo"
+          : hasProgress
+            ? "Rollover parcial"
+            : "Sin uso",
       };
+    }
     case "BET_BONUS_NO_ROLLOVER":
       return {
-        primary: `${formatCurrencyAmount(reward.usageTracking.totalUsed)} usado`,
+        primary: reward.usageTracking.totalUsed > 0 ? "Usada" : "Sin uso",
       };
     case "CASHBACK_FREEBET":
       return {
-        primary: `${formatCurrencyAmount(reward.usageTracking.totalCashback)} cashback`,
+        primary: reward.usageTracking.totalCashback > 0 ? "Cashback generado" : "Sin uso",
       };
     case "ENHANCED_ODDS":
       return {
         primary: reward.usageTracking.oddsUsed ? "Cuota usada" : "Sin uso",
       };
-    case "CASINO_SPINS":
+    case "CASINO_SPINS": {
+      const hasUsage = reward.usageTracking.spinsUsed > 0;
+      const isCompleted = hasUsage && reward.usageTracking.remainingSpins <= 0;
+
       return {
-        primary: `${reward.usageTracking.spinsUsed} usados · ${reward.usageTracking.remainingSpins} restantes`,
+        primary: isCompleted ? "Uso completo" : hasUsage ? "Uso parcial" : "Sin uso",
       };
+    }
     default:
       return {
         primary: `Balance ${formatCurrencyAmount(reward.totalBalance)}`,
@@ -118,8 +134,8 @@ export function getRewardRelatedBetContextSummary(item: RewardRelatedBet) {
 
   const qualifier =
     item.context.qualifyConditionIndex !== undefined
-      ? `QC${item.context.qualifyConditionIndex}`
-      : "QC";
+      ? `Condición ${item.context.qualifyConditionIndex}`
+      : "Condición";
 
   return {
     primary: `${qualifier} · ${getRelatedQualifyConditionTypeLabel(item.context.qualifyConditionType)}`,
@@ -129,7 +145,7 @@ export function getRewardRelatedBetContextSummary(item: RewardRelatedBet) {
 
 export function getRewardRelatedDepositContextSummary(item: RewardRelatedDeposit) {
   return {
-    primary: `QC${item.context.qualifyConditionIndex} · Depósito`,
+    primary: `Condición ${item.context.qualifyConditionIndex} · Depósito`,
     secondary: undefined,
   };
 }

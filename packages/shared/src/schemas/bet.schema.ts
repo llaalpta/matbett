@@ -71,6 +71,10 @@ const HedgeStrategyContextSchemaBase = z.object({
   hedgeAdjustmentType: HedgeAdjustmentTypeSchema.optional(),
 });
 
+export const BetOperationContextSchema = z.object({
+  lineMode: BetLineModeSchema.default('SINGLE'),
+});
+
 export const HedgeStrategyContextSchema = HedgeStrategyContextSchemaBase.superRefine(
   validateStrategyContext,
 );
@@ -218,6 +222,7 @@ export const BetSchema = BetLegInputSchema.omit({
 });
 
 const RegisterBetsBatchSchemaBase = z.object({
+  operation: BetOperationContextSchema,
   strategy: StrategyContextSchema,
   calculation: CreateCalculationContextSchema,
   events: z.array(BatchEventSchema).min(1).max(3),
@@ -228,6 +233,7 @@ const RegisterBetsBatchSchemaBase = z.object({
 });
 
 const UpdateBetsBatchSchemaBase = z.object({
+  operation: BetOperationContextSchema,
   strategy: StrategyContextSchema,
   calculation: UpdateCalculationContextSchema,
   events: z.array(BatchEventSchema).min(1).max(3),
@@ -247,6 +253,7 @@ export const UpdateBetsBatchSchema = UpdateBetsBatchSchemaBase.superRefine((valu
 
 export const BetRegistrationBatchSchema = z.object({
   id: EntityIdSchema,
+  operation: BetOperationContextSchema,
   strategy: StrategyContextSchema,
   scenarioId: ScenarioIdSchema.optional(),
   calculationParticipationId: EntityIdSchema.optional(),
@@ -261,6 +268,7 @@ export const BetRegistrationBatchSchema = z.object({
 
 export const BetBatchSummarySchema = z.object({
   id: EntityIdSchema,
+  operation: BetOperationContextSchema,
   strategy: StrategyContextSchema,
   scenarioId: ScenarioIdSchema.optional(),
   calculationParticipationId: EntityIdSchema.optional(),
@@ -291,6 +299,7 @@ export const BetBatchListInputSchema = PaginationInputSchema.extend({
 });
 
 export const BetListItemSchema = BetSchema.extend({
+  operation: BetOperationContextSchema,
   strategy: StrategyContextSchema,
   scenarioId: ScenarioIdSchema.optional(),
   events: z.array(BatchEventSchema).min(1).max(3),
@@ -394,6 +403,7 @@ export type EnhancedOdds = z.infer<typeof EnhancedOddsSchema>;
 export type NoStrategyContext = z.infer<typeof NoStrategyContextSchema>;
 export type HedgeStrategyContext = z.infer<typeof HedgeStrategyContextSchema>;
 export type StrategyContext = z.infer<typeof StrategyContextSchema>;
+export type BetOperationContext = z.infer<typeof BetOperationContextSchema>;
 
 export type CreateCalculationTarget = z.infer<typeof CreateCalculationTargetSchema>;
 export type CreateCalculationContext = z.infer<typeof CreateCalculationContextSchema>;
@@ -562,6 +572,7 @@ function validateBatch(
   ctx: z.RefinementCtx,
   mode: 'create' | 'update',
 ) {
+  validateOperationStrategyCoherence(batch, ctx);
   validateEventCardinality(batch, ctx);
   validateLegOrders(batch.legs, ctx);
   validateParticipationKeys(batch.legs, ctx);
@@ -615,7 +626,7 @@ function validateEventCardinality(
   batch: RegisterBetsBatch | UpdateBetsBatch,
   ctx: z.RefinementCtx,
 ) {
-  const expectedEvents = getExpectedEventCount(batch.strategy);
+  const expectedEvents = getExpectedEventCount(batch.operation);
 
   if (batch.events.length !== expectedEvents) {
     ctx.addIssue({
@@ -704,7 +715,10 @@ function validateTrackingContributionUniqueness(
   legs: ReadonlyArray<BetLegInput | UpdateBetLegInput>,
   ctx: z.RefinementCtx,
 ) {
-  const objectiveMap = new Map<string, number>();
+  const objectiveMap = new Map<
+    string,
+    { totalCount: number; contributingCount: number }
+  >();
 
   legs.forEach((leg, legIndex) => {
     leg.participations.forEach((participation, participationIndex) => {
@@ -713,8 +727,15 @@ function validateTrackingContributionUniqueness(
           ? `QUALIFY_TRACKING:${participation.qualifyConditionId}`
           : `REWARD_USAGE:${participation.usageTrackingId}`;
 
-      const nextCount = objectiveMap.get(objectiveKey) ?? 0;
-      objectiveMap.set(objectiveKey, nextCount + (participation.contributesToTracking ? 1 : 0));
+      const previous = objectiveMap.get(objectiveKey) ?? {
+        totalCount: 0,
+        contributingCount: 0,
+      };
+      objectiveMap.set(objectiveKey, {
+        totalCount: previous.totalCount + 1,
+        contributingCount:
+          previous.contributingCount + (participation.contributesToTracking ? 1 : 0),
+      });
 
       if (
         participation.kind === 'QUALIFY_TRACKING' &&
@@ -729,7 +750,15 @@ function validateTrackingContributionUniqueness(
     });
   });
 
-  objectiveMap.forEach((contributingCount, objectiveKey) => {
+  objectiveMap.forEach(({ totalCount, contributingCount }, objectiveKey) => {
+    if (totalCount !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Cada objetivo promocional debe aparecer una sola vez dentro del batch. Objetivo afectado: ${objectiveKey}.`,
+        path: ['legs'],
+      });
+    }
+
     if (contributingCount !== 1) {
       ctx.addIssue({
         code: 'custom',
@@ -744,7 +773,7 @@ function validateSelections(
   batch: RegisterBetsBatch | UpdateBetsBatch,
   ctx: z.RefinementCtx,
 ) {
-  const isCombined = batch.strategy.kind === 'HEDGE' && batch.strategy.lineMode !== 'SINGLE';
+  const isCombined = batch.operation.lineMode !== 'SINGLE';
 
   batch.legs.forEach((leg, legIndex) => {
     const eventIndexes = new Set<number>();
@@ -788,6 +817,27 @@ function validateSelections(
         }
       });
 
+      return;
+    }
+
+    if (batch.strategy.kind === 'NONE') {
+      if (leg.selections.length !== batch.events.length) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Una combinada sin cobertura debe incluir una seleccion por cada evento del batch.',
+          path: ['legs', legIndex, 'selections'],
+        });
+      }
+
+      leg.selections.forEach((selection, selectionIndex) => {
+        if (selection.odds === undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Cada seleccion de una combinada sin cobertura requiere odds individual.',
+            path: ['legs', legIndex, 'selections', selectionIndex, 'odds'],
+          });
+        }
+      });
       return;
     }
 
@@ -866,6 +916,23 @@ function validateNoneStrategyBatch(
       code: 'custom',
       message: 'strategy.kind=NONE no usa calculation.target.',
       path: ['calculation', 'target'],
+    });
+  }
+}
+
+function validateOperationStrategyCoherence(
+  batch: RegisterBetsBatch | UpdateBetsBatch,
+  ctx: z.RefinementCtx,
+) {
+  if (batch.strategy.kind !== 'HEDGE') {
+    return;
+  }
+
+  if (batch.strategy.lineMode !== batch.operation.lineMode) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'strategy.lineMode debe coincidir con operation.lineMode.',
+      path: ['strategy', 'lineMode'],
     });
   }
 }
@@ -1049,12 +1116,12 @@ function getBaseLegCount(strategy: HedgeStrategyContext): number | undefined {
   return strategy.lineMode === 'COMBINED_2' ? 3 : 4;
 }
 
-export function getExpectedEventCount(strategy: StrategyContext): number {
-  if (strategy.kind === 'NONE' || strategy.lineMode === 'SINGLE') {
+export function getExpectedEventCount(operation: BetOperationContext): number {
+  if (operation.lineMode === 'SINGLE') {
     return 1;
   }
 
-  return strategy.lineMode === 'COMBINED_2' ? 2 : 3;
+  return operation.lineMode === 'COMBINED_2' ? 2 : 3;
 }
 
 export function getExpectedLegRolesForStrategy(

@@ -70,11 +70,14 @@ function deriveOpposedSelectionLabel(selection?: string) {
   return `En contra de ${normalizedSelection}`;
 }
 
-function isSingleMatchedBettingLayout(strategy: BetBatchFormValues["strategy"]) {
+function isSingleMatchedBettingLayout(
+  operation: BetBatchFormValues["operation"],
+  strategy: BetBatchFormValues["strategy"]
+) {
   return (
     strategy.kind === "HEDGE" &&
     strategy.strategyType === "MATCHED_BETTING" &&
-    strategy.lineMode === "SINGLE"
+    operation.lineMode === "SINGLE"
   );
 }
 
@@ -95,6 +98,7 @@ export function useBetLegCardLogic({
 }: UseBetLegCardLogicArgs) {
   const form = useFormContext<BetBatchFormValues>();
   const leg = useWatch({ control: form.control, name: `legs.${legIndex}` });
+  const operation = useWatch({ control: form.control, name: "operation" });
   const strategy = useWatch({ control: form.control, name: "strategy" });
   const scenarioId = useWatch({
     control: form.control,
@@ -117,7 +121,7 @@ export function useBetLegCardLogic({
   const mainSelection =
     allLegs.find((candidate) => candidate.legRole === "MAIN")?.selections?.[0]
       ?.selection ?? "";
-  const isSingleMatchedLayout = isSingleMatchedBettingLayout(strategy);
+  const isSingleMatchedLayout = isSingleMatchedBettingLayout(operation, strategy);
   const derivedHedge1Selection = deriveOpposedSelectionLabel(mainSelection);
   const sharedEvent = events[0];
   const hideGenericSelections =
@@ -143,11 +147,11 @@ export function useBetLegCardLogic({
   const availableAdjustmentTypes =
     mode === "edit" &&
     strategy.kind === "HEDGE" &&
-    strategy.lineMode === "SINGLE"
+    operation.lineMode === "SINGLE"
       ? getAvailableScenarioOptions({
           operation: "update",
           strategyType: strategy.strategyType,
-          lineMode: strategy.lineMode,
+          lineMode: operation.lineMode,
           mode: strategy.mode,
           dutchingOptionsCount: strategy.dutchingOptionsCount,
         }).hedgeAdjustmentTypes
@@ -171,6 +175,8 @@ export function useBetLegCardLogic({
 
   return {
     leg,
+    operation,
+    strategy,
     bookmakerOptions,
     isSingleMatchedLayout,
     isMainLeg,

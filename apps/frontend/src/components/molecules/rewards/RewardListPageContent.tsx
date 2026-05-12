@@ -11,8 +11,6 @@ import {
 import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table";
 import {
   ArrowRightLeft,
-  ChevronDown,
-  ChevronRight,
   Eye,
   FolderKanban,
   Gift,
@@ -22,8 +20,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { CenteredErrorState } from "@/components/feedback";
-import { BetTrackingTable } from "@/components/molecules/bets/BetTrackingTable";
-import { DepositTrackingTable } from "@/components/molecules/deposits/DepositTrackingTable";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,12 +34,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useBookmakerAccounts } from "@/hooks/api/useBookmakerAccounts";
 import { usePromotions } from "@/hooks/api/usePromotions";
-import { useRewardRelatedTracking, useRewards } from "@/hooks/api/useRewards";
+import { useRewards } from "@/hooks/api/useRewards";
 import { useRewardAccessLogic } from "@/hooks/domain/rewards/useRewardAccessLogic";
 import type { PromotionServerModel } from "@/types/hooks";
-import { formatBookmakerAccountLabel } from "@/utils/bookmakerAccounts";
 import {
   formatCurrencyAmount,
   formatDate,
@@ -53,8 +47,6 @@ import {
   getRewardIdentitySummary,
   getRewardPromotionSummary,
   getRewardQualifySummary,
-  getRewardRelatedBetContextSummary,
-  getRewardRelatedDepositContextSummary,
   getRewardUsageSummary,
 } from "@/utils/rewards";
 import { getCompactStatusLabel } from "@/utils/statusLabels";
@@ -120,14 +112,6 @@ function getRewardPhaseSummary(
   return resolvedPhaseName || undefined;
 }
 
-function hasRewardRelatedActivity(reward: RewardEntity) {
-  return (
-    reward.qualifyConditions.some(
-      (condition) => condition.trackingStats.totalParticipations > 0
-    ) || (reward.totalStake ?? 0) > 0
-  );
-}
-
 function RewardActions({
   reward,
   promotion,
@@ -188,101 +172,12 @@ function RewardActions({
           variant="ghost"
           size="sm"
           className="h-7 w-7 p-0"
-          title="Abrir reward"
-          aria-label="Abrir reward"
+          title="Abrir recompensa"
+          aria-label="Abrir recompensa"
         >
           <Eye className="h-4 w-4" />
         </Button>
       </Link>
-    </div>
-  );
-}
-
-function RewardExpandedPanel({
-  reward,
-  bookmakerAccountLabelById,
-}: {
-  reward: RewardEntity;
-  bookmakerAccountLabelById: Map<string, string>;
-}) {
-  const relatedTrackingQuery = useRewardRelatedTracking(reward.id);
-  const relatedBets = relatedTrackingQuery.data?.relatedBets ?? [];
-  const relatedDeposits = relatedTrackingQuery.data?.relatedDeposits ?? [];
-
-  if (relatedTrackingQuery.isLoading) {
-    return (
-      <div className="text-muted-foreground px-1 py-1 text-[13px]">
-        Cargando actividad relacionada...
-      </div>
-    );
-  }
-
-  if (relatedTrackingQuery.error) {
-    return (
-      <div className="text-muted-foreground px-1 py-1 text-[13px]">
-        No se pudo cargar la actividad relacionada de esta reward.
-      </div>
-    );
-  }
-
-  if (relatedBets.length === 0 && relatedDeposits.length === 0) {
-    return (
-      <div className="text-muted-foreground px-1 py-1 text-[13px]">
-        No hay actividad relacionada registrada todavía para esta reward.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {relatedBets.length > 0 ? (
-        <div className="space-y-1.5">
-          <div className="text-muted-foreground px-0.5 text-[11px] font-medium tracking-[0.03em]">
-            Apuestas relacionadas
-          </div>
-          <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
-            <div className="overflow-x-auto">
-              <BetTrackingTable
-                bets={relatedBets.map((item) => item.bet)}
-                bookmakerAccountLabelById={bookmakerAccountLabelById}
-                contextColumn={{
-                  header: "Contexto",
-                  render: (bet) => {
-                    const item = relatedBets.find((candidate) => candidate.bet.id === bet.id);
-                    return item
-                      ? getRewardRelatedBetContextSummary(item)
-                      : { primary: "Actividad relacionada" };
-                  },
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {relatedDeposits.length > 0 ? (
-        <div className="space-y-1.5">
-          <div className="text-muted-foreground px-0.5 text-[11px] font-medium tracking-[0.03em]">
-            Depósitos relacionados
-          </div>
-          <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
-            <div className="overflow-x-auto">
-              <DepositTrackingTable
-                deposits={relatedDeposits.map((item) => item.deposit)}
-                contextColumn={{
-                  header: "Contexto",
-                  render: (deposit) => {
-                    const item = relatedDeposits.find((candidate) => candidate.deposit.id === deposit.id);
-                    return item
-                      ? getRewardRelatedDepositContextSummary(item)
-                      : { primary: "QC · Depósito" };
-                  },
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -299,15 +194,7 @@ export default function RewardListPageContent() {
     pageIndex: 0,
     pageSize: 100,
   });
-  const bookmakerAccountsQuery = useBookmakerAccounts({
-    pageIndex: 0,
-    pageSize: 100,
-  });
   const promotions = useMemo(() => promotionsQuery.data?.data ?? [], [promotionsQuery.data]);
-  const bookmakerAccounts = useMemo(
-    () => bookmakerAccountsQuery.data?.data ?? [],
-    [bookmakerAccountsQuery.data]
-  );
 
   const queryInput: RewardListInput = {
     pageIndex: pagination.pageIndex,
@@ -323,13 +210,6 @@ export default function RewardListPageContent() {
 
   const rewards = data?.data ?? [];
   const meta = data?.meta;
-  const bookmakerAccountLabelById = useMemo(
-    () =>
-      new Map(
-        bookmakerAccounts.map((account) => [account.id, formatBookmakerAccountLabel(account)])
-      ),
-    [bookmakerAccounts]
-  );
 
   const promotionDataById = useMemo(
     () =>
@@ -350,40 +230,6 @@ export default function RewardListPageContent() {
   const columns = useMemo<Array<ColumnDef<RewardEntity>>>(
     () => [
       {
-        id: "expand",
-        header: "",
-        cell: ({ row }) =>
-          hasRewardRelatedActivity(row.original) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => {
-                row.toggleExpanded();
-              }}
-              aria-label={
-                row.getIsExpanded()
-                  ? "Ocultar apuestas o depósitos relacionados"
-                  : "Ver apuestas o depósitos relacionados"
-              }
-              title={
-                row.getIsExpanded()
-                  ? "Ocultar apuestas o depósitos relacionados"
-                  : "Ver apuestas o depósitos relacionados"
-              }
-            >
-              {row.getIsExpanded() ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          ) : (
-            <span className="block h-7 w-7" aria-hidden="true" />
-          ),
-      },
-      {
         id: "promotion",
         header: "Promoción",
         cell: ({ row }) => {
@@ -401,7 +247,7 @@ export default function RewardListPageContent() {
       },
       {
         accessorKey: "type",
-        header: "Tipo de reward",
+        header: "Tipo de recompensa",
         enableSorting: true,
         cell: ({ row }) => {
           const summary = getRewardIdentitySummary(row.original);
@@ -449,11 +295,11 @@ export default function RewardListPageContent() {
             deadline.state === "date" && deadline.date
               ? formatDate(deadline.date)
               : deadline.state === "no_qc"
-                ? "Sin QC"
+                ? "Sin condiciones"
                 : deadline.state === "closed"
                   ? "Cerrada"
                   : deadline.state === "open_ended"
-                    ? "Sin resolver"
+                    ? "Sin fecha de fin"
                     : "Sin resolver";
 
           return (
@@ -465,7 +311,7 @@ export default function RewardListPageContent() {
       },
       {
         id: "qualify",
-        header: "QC",
+        header: "Condiciones",
         cell: ({ row }) => {
           const summary = getRewardQualifySummary(row.original);
 
@@ -490,7 +336,7 @@ export default function RewardListPageContent() {
             ? "Sin resolver"
             : usageWindow.end
               ? formatDate(usageWindow.end)
-              : "Sin resolver";
+              : "Sin fecha de fin";
 
           return (
             <div className="min-w-[104px] tabular-nums whitespace-nowrap" title={label}>
@@ -564,7 +410,7 @@ export default function RewardListPageContent() {
       <PageHeader
         eyebrow="Promociones"
         title="Recompensas"
-        description="Vista operativa de rewards persistidas para revisar su ciclo, calificación, uso y balance antes de entrar en detalle."
+        description="Vista operativa de recompensas persistidas para revisar su ciclo, calificación, uso y balance antes de entrar en detalle."
         actions={
           <Link href="/promotions">
             <Button variant="outline">
@@ -575,7 +421,7 @@ export default function RewardListPageContent() {
         }
         meta={
           <>
-            <span>{meta?.rowCount ?? 0} rewards</span>
+            <span>{meta?.rowCount ?? 0} recompensas</span>
             <span>{isFetching ? "Actualizando datos..." : "Datos sincronizados"}</span>
           </>
         }
@@ -592,13 +438,6 @@ export default function RewardListPageContent() {
         pageCount={meta?.pageCount}
         isLoading={isLoading}
         getRowId={(reward) => reward.id}
-        getRowCanExpand={(row) => hasRewardRelatedActivity(row.original)}
-        renderExpandedRow={(row) => (
-          <RewardExpandedPanel
-            reward={row.original}
-            bookmakerAccountLabelById={bookmakerAccountLabelById}
-          />
-        )}
         toolbar={
           <FilterBar>
             <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -639,7 +478,7 @@ export default function RewardListPageContent() {
                     setPagination((current) => ({ ...current, pageIndex: 0 }));
                   }}
                 >
-                  <SelectTrigger className="w-full" aria-label="Filtrar rewards por estado">
+                  <SelectTrigger className="w-full" aria-label="Filtrar recompensas por estado">
                     <SelectValue placeholder="Todos los estados" />
                   </SelectTrigger>
                   <SelectContent>
@@ -668,7 +507,7 @@ export default function RewardListPageContent() {
                     setPagination((current) => ({ ...current, pageIndex: 0 }));
                   }}
                 >
-                  <SelectTrigger className="w-full" aria-label="Filtrar rewards por tipo">
+                  <SelectTrigger className="w-full" aria-label="Filtrar recompensas por tipo">
                     <SelectValue placeholder="Todos los tipos" />
                   </SelectTrigger>
                   <SelectContent>
@@ -697,7 +536,7 @@ export default function RewardListPageContent() {
                     setPagination((current) => ({ ...current, pageIndex: 0 }));
                   }}
                 >
-                  <SelectTrigger className="w-full" aria-label="Filtrar rewards por promoción">
+                  <SelectTrigger className="w-full" aria-label="Filtrar recompensas por promoción">
                     <SelectValue placeholder="Todas las promociones" />
                   </SelectTrigger>
                   <SelectContent>
@@ -731,7 +570,7 @@ export default function RewardListPageContent() {
         emptyState={
           <EmptyState
             title="No hay recompensas"
-            description="Las rewards persistidas aparecerán aquí para revisión operativa y acceso rápido a su detalle."
+            description="Las recompensas persistidas aparecerán aquí para revisión operativa y acceso rápido a su detalle."
             icon={Gift}
             action={
               <Link href="/promotions">

@@ -38,7 +38,7 @@ export function useBetNewFromQualifyConditionContext(
       promotionName: matchingContext.promotionName,
       sourceLabel: qualifyCondition.type,
       returnHref: `/qualify-conditions/${qualifyCondition.id}`,
-      returnLabel: "Volver a la qualify condition",
+      returnLabel: "Volver a la condición",
       initialParticipation: {
         kind: "QUALIFY_TRACKING",
         rewardType: firstReward.rewardType,
@@ -57,7 +57,7 @@ export function useBetNewFromQualifyConditionContext(
     }
 
     if (!supportedQualifyConditionTypes.has(qualifyCondition.type)) {
-      return "Esta qualify condition no se puede satisfacer registrando apuestas.";
+      return "Esta condición no se puede satisfacer registrando apuestas.";
     }
 
     if (availableContextsQuery.isLoading || availableContextsQuery.isFetching) {
@@ -69,7 +69,7 @@ export function useBetNewFromQualifyConditionContext(
     }
 
     if (!initialContext) {
-      return "Esta qualify condition no está disponible ahora mismo como contexto de tracking para apuestas.";
+      return "Esta condición no está disponible ahora mismo como contexto de tracking para apuestas.";
     }
 
     return undefined;

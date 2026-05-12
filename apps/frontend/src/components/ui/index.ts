@@ -12,3 +12,4 @@ export * from "./loading-state";
 export * from "./filter-bar";
 export * from "./detail-grid";
 export * from "./data-table";
+export * from "./table";

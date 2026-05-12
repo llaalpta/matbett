@@ -158,7 +158,7 @@ export function QualifyBetCondition<T extends FieldValues>({
             <InputField<T>
               control={control}
               name={paths.maxRewardAmount}
-              label="Reward máxima obtenible (EUR)"
+              label="Recompensa máxima obtenible (EUR)"
               type="number"
               step={0.01}
               min={0}
@@ -174,7 +174,7 @@ export function QualifyBetCondition<T extends FieldValues>({
               </p>
               <p className="mt-1 text-blue-700 dark:text-blue-300">
                 Apostar por encima de EUR{optimalStake.toFixed(2)} no aumenta la
-                reward.
+                recompensa.
               </p>
               {minStake && minStake > optimalStake ? (
                 <p className="mt-2 font-medium text-amber-700 dark:text-amber-300">

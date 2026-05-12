@@ -8,6 +8,19 @@ context, but this is not the current active work queue.
 Use `docs/bet-registration-implementation-plan.md` for functional behavior and
 `docs/backlog.md` for current next work.
 
+Current clarification:
+1. `BetParticipation` is a persisted promotional participation of a real bet,
+   not a visual link between sibling legs.
+2. `contributesToTracking=false` is reserved for future real promotional
+   participations that should not affect tracking/calculation. It must not be
+   used to copy context to hedge legs just so the UI can display the operation.
+3. Sibling legs are related by `batchId`; contextual tables should show the
+   complete operation by loading the batch and its bets, not by duplicating
+   promotional participation rows.
+4. In the current implementation, each promotional objective can appear only
+   once per batch and must have exactly one `contributesToTracking=true`
+   participation.
+
 ## Resumen
 Este documento fija la version final del modelo para soportar:
 1. Registro standalone.
@@ -201,7 +214,9 @@ Campos:
 7. Una misma leg puede participar en multiples promociones simultaneamente.
 8. Una misma leg puede ser `HEDGE1` estrategicamente y, a la vez, `contributesToTracking=true` en una o varias participaciones promocionales.
 9. Registrar/cambiar apuestas recalcula tracking pero no cambia estados manuales de QC/reward.
-10. Para cada objetivo de tracking presente en el batch (`qualifyConditionId` o `usageTrackingId`), debe existir exactamente una participacion con `contributesToTracking=true`.
+10. Para cada objetivo promocional presente en el batch (`qualifyConditionId` o `usageTrackingId`), debe existir una sola participacion en el batch.
+11. Esa participacion debe tener `contributesToTracking=true` si gobierna tracking/calculo.
+12. Las legs hermanas de una matched bet se muestran como parte de la misma operacion por compartir `batchId`, no por participaciones duplicadas.
 
 ## Integridad referencial y constraints
 1. `FK bets.batchId -> bet_registration_batches.id`.
@@ -215,12 +230,10 @@ Campos:
 9. CHECK por tipo de participacion:
 - `QUALIFY_TRACKING` => `qualifyConditionId NOT NULL`, `usageTrackingId NULL`, `rewardId NULL`, `rewardIds NOT NULL`, `calculationRewardId NOT NULL`, `rewardType NOT NULL`.
 - `REWARD_USAGE` => `usageTrackingId NOT NULL`, `qualifyConditionId NULL`, `rewardId NOT NULL`, `rewardIds NULL`, `calculationRewardId NULL`, `rewardType NOT NULL`.
-10. Anti-duplicado por leg+objetivo (aunque `contributesToTracking=false`):
-- `UNIQUE(betId, kind, qualifyConditionId)` para `kind='QUALIFY_TRACKING'`.
-- `UNIQUE(betId, kind, usageTrackingId)` para `kind='REWARD_USAGE'`.
-11. Unicidad de leg contribuyente por objetivo dentro del batch:
-- indice parcial unico para `QUALIFY_TRACKING`: `UNIQUE(batchId, qualifyConditionId) WHERE kind='QUALIFY_TRACKING' AND contributesToTracking=true`.
-- indice parcial unico para `REWARD_USAGE`: `UNIQUE(batchId, usageTrackingId) WHERE kind='REWARD_USAGE' AND contributesToTracking=true`.
+10. Anti-duplicado por objetivo dentro del batch:
+- `UNIQUE(batchId, kind, qualifyConditionId)` para `kind='QUALIFY_TRACKING'`.
+- `UNIQUE(batchId, kind, usageTrackingId)` para `kind='REWARD_USAGE'`.
+11. La participacion que gobierna tracking/calculo debe tener `contributesToTracking=true`.
 12. Idempotencia:
 - `UNIQUE(userId, idempotencyKey) WHERE idempotencyKey IS NOT NULL`.
 13. Consistencia de snapshot:
@@ -238,14 +251,12 @@ Campos:
 - si DB soporta arrays (p. ej. Postgres), crear indice GIN sobre `bet_participations.rewardIds`.
 - si no hay soporte adecuado, usar tabla relacional `bet_participation_rewards` como via recomendada.
 
-## Ejemplo complejo valido (tu caso)
+## Ejemplo complejo valido
 1. Leg 1 (`MAIN`) participa en `REWARD_USAGE` de freebet (`usageTrackingId=usage_freebet_1`, `contributesToTracking=true`).
-2. Leg 2 (`HEDGE1`) participa en:
-- la misma `REWARD_USAGE` de freebet (`contributesToTracking=false`),
-- una `REWARD_USAGE` de enhanced odds (`usageTrackingId=usage_enhanced_1`, `contributesToTracking=true`),
-- otra `REWARD_USAGE` de bono rollover (`usageTrackingId=usage_bonus_1`, `contributesToTracking=true`),
-- y opcionalmente una `QUALIFY_TRACKING` para liberar una freebet (`qualifyConditionId=qc_1`, `contributesToTracking=true`).
-3. `calculation.target` apunta a la participacion que gobierna el escenario activo del formulario.
+2. Leg 2 (`HEDGE1`) no replica esa participacion solo por ser hedge de la misma operacion.
+3. La UI muestra Leg 1 y Leg 2 juntas porque ambas pertenecen al mismo `batchId`.
+4. Si otra promocion afecta realmente a otra leg, se registra una participacion distinta con otro objetivo promocional.
+5. `calculation.target` apunta a la participacion que gobierna el escenario activo del formulario.
 
 ## Calculo reactivo (criterio final)
 El motor consume:

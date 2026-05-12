@@ -37,6 +37,7 @@ interface InputFieldProps<
   
   // Contenido y Etiquetas
   label?: string;
+  labelClassName?: string;
   placeholder?: string;
   description?: string;
   tooltip?: string;
@@ -44,6 +45,7 @@ interface InputFieldProps<
   // Configuración del Input
   type?: "text" | "email" | "number" | "password" | "url";
   variant?: "default" | "outline" | "ghost";
+  size?: "sm" | "md";
   disabled?: boolean;
   readOnly?: boolean;
   required?: boolean; // Activa lógica visual de "warning"
@@ -73,11 +75,13 @@ export function InputField<
   control,
   name,
   label,
+  labelClassName,
   placeholder,
   description,
   tooltip,
   type = "text",
   variant = "default",
+  size = "md",
   className,
   containerClassName,
   inputClassName, // Nueva prop para estilos específicos del input
@@ -97,9 +101,19 @@ export function InputField<
     outline: "border-border bg-background",
     ghost: "border-transparent bg-background",
   };
+  const sizeClasses = {
+    sm: "h-8 px-2 text-xs",
+    md: "h-10",
+  };
 
   return (
-    <div className={cn("min-w-0 space-y-2", containerClassName)}>
+    <div
+      className={cn(
+        "min-w-0",
+        size === "sm" ? "space-y-1" : "space-y-2",
+        containerClassName
+      )}
+    >
       <FormField
         control={control}
         name={name}
@@ -120,6 +134,7 @@ export function InputField<
                   label={label}
                   required={required}
                   tooltip={tooltip}
+                  className={labelClassName}
                 />
               )}
               
@@ -144,6 +159,7 @@ export function InputField<
                   // 4. Composición de clases (Variante + Custom)
                   className={cn(
                     variantClasses[variant],
+                    sizeClasses[size],
                     "focus-visible:ring-ring transition-colors",
                     readOnly ? "bg-muted/30" : undefined,
                     inputClassName
@@ -167,10 +183,27 @@ export function InputField<
                       }
 
                       // Convertir string vacío a undefined para que Zod no falle validando strings
-                      const numValue =
+                      let numValue =
                         normalizedRawValue === ""
                           ? undefined
                           : Number(normalizedRawValue);
+
+                      if (
+                        typeof numValue === "number" &&
+                        Number.isNaN(numValue)
+                      ) {
+                        return;
+                      }
+
+                      if (
+                        typeof numValue === "number" &&
+                        min !== undefined &&
+                        numValue < min
+                      ) {
+                        numValue = min;
+                        e.target.value = String(min);
+                      }
+
                       field.onChange(numValue);
                       onValueChange?.(numValue);
                     } else {

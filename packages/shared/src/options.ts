@@ -100,10 +100,10 @@ export const hedgeModeOptions = [
 export type HedgeMode = (typeof hedgeModeOptions)[number]["value"];
 
 export const hedgeRoleOptions = [
-  { value: "MAIN", label: "BackBet" },
-  { value: "HEDGE1", label: "LayBet" },
-  { value: "HEDGE2", label: "LayBet2" },
-  { value: "HEDGE3", label: "LayBet3" },
+  { value: "MAIN", label: "Apuesta 1" },
+  { value: "HEDGE1", label: "Apuesta 2" },
+  { value: "HEDGE2", label: "Apuesta 3" },
+  { value: "HEDGE3", label: "Apuesta 4" },
 ] as const satisfies readonly SelectOption<string>[];
 export type HedgeRole = (typeof hedgeRoleOptions)[number]["value"];
 
@@ -115,9 +115,9 @@ export const optionsOptions = [
 export type Options = (typeof optionsOptions)[number]["value"];
 
 export const betLineModeOptions = [
-  { value: "SINGLE", label: "Simple" },
-  { value: "COMBINED_2", label: "Combinada 2 líneas" },
-  { value: "COMBINED_3", label: "Combinada 3 líneas" },
+  { value: "SINGLE", label: "Apuesta simple" },
+  { value: "COMBINED_2", label: "Apuesta combinada de 2 eventos" },
+  { value: "COMBINED_3", label: "Apuesta combinada de 3 eventos" },
 ] as const satisfies readonly SelectOption<string>[];
 export type BetLineMode = (typeof betLineModeOptions)[number]["value"];
 

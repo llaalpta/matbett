@@ -17,7 +17,6 @@ import { useQualifyConditionLogic } from "@/hooks/domain/qualifyConditions/useQu
 import type { PromotionServerModel, RewardServerModel } from "@/types/hooks";
 import type { RewardQualifyConditionServerModel } from "@/types/hooks";
 
-import { BetEntryLauncherCard } from "./bets/BetEntryLauncherCard";
 import {
   DepositCondition,
   type DepositConditionPaths,
@@ -85,7 +84,6 @@ interface QualifyConditionFormProps<T extends FieldValues> {
   phaseStatus?: NonNullable<PromotionServerModel>["phases"][number]["status"] | string;
   readOnly?: boolean;
   readOnlyReason?: string;
-  showBetEntryLauncher?: boolean;
 }
 
 export function QualifyConditionForm<T extends FieldValues>({
@@ -110,7 +108,6 @@ export function QualifyConditionForm<T extends FieldValues>({
   phaseStatus,
   readOnly = false,
   readOnlyReason,
-  showBetEntryLauncher = false,
 }: QualifyConditionFormProps<T>) {
   const { control, watch } = useFormContext<T>();
   const formValues = watch();
@@ -165,16 +162,6 @@ export function QualifyConditionForm<T extends FieldValues>({
             ))}
           </AlertDescription>
         </Alert>
-      ) : null}
-
-      {showBetEntryLauncher && qualifyConditionAccess.canLaunchBetEntry ? (
-        <BetEntryLauncherCard
-          title="Registro contextual de apuestas"
-          description="Abre el formulario de bets con esta qualify condition ya preseleccionada."
-          actionLabel="Registrar apuesta para esta condición"
-          href={conditionId ? `/bets/new/from-qualify-condition/${conditionId}` : undefined}
-          disabledReason={qualifyConditionAccess.betEntryDisabledReason}
-        />
       ) : null}
 
       {(canRemove || removeDisabledReason) && (
@@ -236,7 +223,7 @@ export function QualifyConditionForm<T extends FieldValues>({
           <SwitchField<T>
             control={control}
             name={paths.contributesToRewardValue}
-            label="El valor de la reward depende de esta condicion"
+            label="El valor de la recompensa depende de esta condicion"
             description={
               contributesToRewardValue || !rewardHasContributingCondition
                 ? conditionType === "DEPOSIT"

@@ -986,30 +986,42 @@ type UpdateBetLegInput = BetLegInput & {
 - [ ] Solo cuando esta checklist esté cerrada se continúa con el siguiente escenario de cálculo.
 
 **Orden de implementación acordado para esta mejora**
-1. [ ] Añadir lanzadores contextuales desde detalle de `Qualify Condition` y detalle de `Reward` hacia `bets/new`.
+1. [x] Añadir lanzadores contextuales desde detalle de `Qualify Condition` y detalle de `Reward` hacia `bets/new`.
    - CTA esperados:
      - `Registrar apuesta para esta condición`
      - `Usar esta reward`
    - El formulario canónico sigue siendo `bets/new`; no se incrusta el batch form completo dentro del form de promotion/reward/QC.
-2. [ ] Hacer que `bets/new` acepte contexto de entrada por query params y muestre un banner persistente de origen.
+2. [x] Hacer que `bets/new` acepte contexto de entrada por query params y muestre un banner persistente de origen.
    - Debe pre-rellenar al menos:
      - `bookmakerAccountId` de la primera leg,
      - la primera participación contextual en la leg inicial,
      - y el contexto visible de `QC` o `Reward` desde el que se abrió el flujo.
    - El punto de entrada contextual NO fuerza por sí solo un tipo de apuesta; solo reduce fricción.
-3. [ ] Mejorar después el selector interno de participaciones (`Añadir QT` / `Añadir RU`) con previews ricos y cards contextualizadas.
+3. [x] Mejorar después el selector interno de participaciones (`Añadir QT` / `Añadir RU`) con previews ricos y cards contextualizadas.
    - Este paso sustituye al selector ciego actual como UX principal dentro del formulario.
-4. [ ] Añadir más adelante tablas read-only de apuestas relacionadas dentro de `QC` / `Reward` / `UsageTracking`.
+4. [x] Añadir tablas read-only de apuestas/depositos relacionadas dentro de `QC` / `Reward`.
    - Sirven para seguimiento y auditoría.
    - No bloquean esta primera iteración de punto de entrada contextual.
 
 **Checklist específica de esta iteración**
-- [ ] Desde un `QC` aplicable se puede abrir `bets/new` con contexto precargado.
-- [ ] Desde una `Reward` usable en apuestas se puede abrir `bets/new` con contexto precargado.
-- [ ] `UsageTrackingForm` sigue siendo read-only; registrar bets ocurre en `bets/new`, no inline dentro del tracking.
-- [ ] `bets/new` muestra claramente el contexto de origen y permite continuar el registro sin perderlo.
-- [ ] La participación contextual inicial se crea automáticamente solo cuando el contexto es válido para la cuenta seleccionada.
-- [ ] La UX contextual queda validada en navegador real antes de seguir con el siguiente bloque de cálculo.
+- [x] Desde un `QC` aplicable se puede abrir `bets/new` con contexto precargado.
+- [x] Desde una `Reward` usable en apuestas se puede abrir `bets/new` con contexto precargado.
+- [x] `UsageTrackingForm` sigue siendo read-only; registrar bets ocurre en `bets/new`, no inline dentro del tracking.
+- [x] `bets/new` muestra claramente el contexto de origen y permite continuar el registro sin perderlo.
+- [x] La participación contextual inicial se crea automáticamente solo cuando el contexto es válido para la cuenta seleccionada.
+- [x] La UX contextual queda validada en navegador real antes de seguir con el siguiente bloque de cálculo.
+
+**Clarificación posterior sobre participaciones promocionales en batches**
+- [x] El contexto de entrada desde QC/Reward solo precarga el formulario; no persiste un
+  "origen bloqueado" ni impide cambiar o eliminar el contexto antes de guardar.
+- [x] La UI no replica la participación promocional en todas las legs del batch.
+  Solo la leg contribuyente guarda la participación real.
+- [x] Las legs hermanas se relacionan visualmente por `batchId`; para ver la operación
+  completa en tablas de QC/Reward se carga el batch y sus bets, no participaciones
+  promocionales duplicadas.
+- [x] Un objetivo promocional solo puede aparecer una vez por batch y debe tener una
+  participación con `contributesToTracking=true`.
+- [x] `calculation.target` solo puede apuntar a una participación que contribuye a tracking.
 
 #### 4.1b Formulario de edición batch
 - Carga datos existentes del batch (incluidos `betId` de cada leg).
@@ -1172,13 +1184,15 @@ type UpdateBetLegInput = BetLegInput & {
   - En `HEDGE1`, `Stake propuesto` es editable manualmente; si cambian los drivers
     originales (`MAIN.stake`, `MAIN.odds`, `HEDGE1.odds`, `HEDGE1.commission`),
     el sistema vuelve a proponer el stake calculado por la fórmula original.
-  - Los campos `profit`, `risk` y `yield` salen de la configuración de las legs y se
-    presentan en la zona `Resumen y cálculo`.
-  - El resumen se divide en:
-    - una tabla por leg con `Back` y `Lay` (`Stake`, `Cuota`, `Retorno`, `Riesgo`,
-      `Beneficio si gana`);
-    - una tabla global con fila `Global` (`Turnover`, `Beneficio si gana Backbet`,
-      `Beneficio si gana Laybet`, `Yield si gana Backbet`, `Yield si gana Laybet`).
+  - Los campos `profit`, `risk` y `yield` se presentan como métricas estimadas
+    readonly dentro de la tabla de apuestas de la operación. No son resultado real
+    liquidado; el balance real se deriva después del estado de la apuesta.
+  - `Cálculo estimado` se muestra solo cuando hay escenario de cobertura. No repite
+    el desglose por leg que ya existe arriba; muestra una tabla compacta de
+    resultados posibles (`Gana la apuesta principal`, `Gana la cobertura`) con
+    `Turnover`, `Balance estimado` y `Yield estimado`.
+  - En apuesta simple sin cobertura, `Cálculo estimado` se oculta porque no aporta
+    información adicional al registro de la leg.
   - En edición, `hedgeAdjustmentType` se proyecta dentro de la leg compatible:
     `PREPAYMENT` en cuentas no `EXCHANGE`, `UNMATCHED` en cuentas `EXCHANGE`.
 

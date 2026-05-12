@@ -12,6 +12,7 @@ import { InputField } from "@/components/atoms/InputField";
 import { SelectField } from "@/components/atoms/SelectField";
 import { TextareaField } from "@/components/atoms/TextareaField";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useBookmakerAccounts } from "@/hooks/api/useBookmakerAccounts";
 import { usePromotionAccessLogic } from "@/hooks/domain/promotions/usePromotionAccessLogic";
 import { usePromotionStatusDateSync } from "@/hooks/useStatusDateSync";
@@ -25,6 +26,12 @@ interface PromotionBasicInfoFormProps {
   serverData?: PromotionServerModel;
 }
 
+const addDays = (date: Date, days: number) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
 export function PromotionBasicInfoForm({
   onSinglePhaseChange,
   onNameChange,
@@ -34,7 +41,9 @@ export function PromotionBasicInfoForm({
   const { control, setValue, getValues } = useFormContext<PromotionFormData>();
   const promotionStatus = useWatch({ control, name: "status" });
   const promotionTimeframe = useWatch({ control, name: "timeframe" });
+  const promotionTimeframeEnd = useWatch({ control, name: "timeframe.end" });
   const phases = useWatch({ control, name: "phases" });
+  const hasNoTimeframeEnd = !promotionTimeframeEnd;
   const { data: bookmakerAccountsResponse, isLoading: isLoadingAccounts } =
     useBookmakerAccounts({
       pageIndex: 0,
@@ -83,6 +92,24 @@ export function PromotionBasicInfoForm({
     timeframe: promotionTimeframe,
     phases,
   });
+
+  const handleNoTimeframeEndChange = (checked: boolean) => {
+    if (checked) {
+      setValue("timeframe.end", undefined, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+      return;
+    }
+
+    const start = getValues("timeframe.start");
+    setValue("timeframe.end", addDays(start instanceof Date ? start : new Date(), 7), {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -178,10 +205,24 @@ export function PromotionBasicInfoForm({
             label="Fecha de inicio de la promoción"
             required
           />
-          <DateTimeField<PromotionFormData>
-            name="timeframe.end"
-            label="Fecha de finalización de la promoción"
-          />
+          <div className="space-y-2">
+            <DateTimeField<PromotionFormData>
+              name="timeframe.end"
+              label="Fecha de finalización de la promoción"
+              disabled={hasNoTimeframeEnd}
+              tooltip="Opcional solo para promociones abiertas. Las fases, condiciones y uso de recompensas mantienen sus propios plazos."
+            />
+            <label className="flex min-h-8 items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={hasNoTimeframeEnd}
+                onCheckedChange={(checked) => {
+                  handleNoTimeframeEndChange(checked === true);
+                }}
+                disabled={!promotionAccess.isStructureEditable}
+              />
+              Sin fecha de fin
+            </label>
+          </div>
         </div>
       </fieldset>
     </div>

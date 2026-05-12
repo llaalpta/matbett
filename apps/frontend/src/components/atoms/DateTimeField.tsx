@@ -30,9 +30,11 @@ interface DateTimeFieldProps<
   control?: Control<TFieldValues>;
   name: TName;
   label?: string;
+  labelClassName?: string;
   tooltip?: string;
   className?: string;
   containerClassName?: string;
+  size?: "sm" | "md";
   disabled?: boolean;
   required?: boolean;
   displayError?: boolean;
@@ -45,15 +47,23 @@ export function DateTimeField<
   control,
   name,
   label,
+  labelClassName,
   tooltip,
   className,
   containerClassName,
+  size = "md",
   disabled = false,
   required = false,
   displayError = false,
 }: DateTimeFieldProps<TFieldValues, TName>) {
   return (
-    <div className={cn("min-w-0 space-y-2", containerClassName)}>
+    <div
+      className={cn(
+        "min-w-0",
+        size === "sm" ? "space-y-1" : "space-y-2",
+        containerClassName
+      )}
+    >
       <FormField
         control={control}
         name={name}
@@ -105,6 +115,7 @@ export function DateTimeField<
                   label={label}
                   required={required}
                   tooltip={tooltip}
+                  className={labelClassName}
                 />
               )}
               <Popover>
@@ -115,7 +126,8 @@ export function DateTimeField<
                       disabled={disabled}
                       data-visual-state={visualState}
                       className={cn(
-                        "w-full pl-3 text-left font-normal text-sm transition-colors",
+                        "w-full text-left font-normal transition-colors",
+                        size === "sm" ? "h-8 px-2 text-xs" : "pl-3 text-sm",
                         !validFieldDate && "text-muted-foreground/50",
                         // Aplicar estilos warning/error al botón trigger
                         visualState === "warning" && "border-warning bg-warning/20 hover:bg-warning/30",

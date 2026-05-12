@@ -3,9 +3,9 @@
 import { FormProvider, Path } from "react-hook-form";
 
 import { ApiErrorBanner, ValidationErrorBanner } from "@/components/feedback";
+import { FormActionBar } from "@/components/molecules/FormActionBar";
 import { buildQualifyConditionStandalonePaths } from "@/components/molecules/qualifyCondition.paths";
 import { QualifyConditionForm } from "@/components/molecules/QualifyConditionForm";
-import { Button } from "@/components/ui/button";
 import { useQualifyConditionStandaloneLogic } from "@/hooks/domain/qualifyConditions/useQualifyConditionStandaloneLogic";
 import { useApiErrorMessage } from "@/hooks/useApiErrorMessage";
 import { useApiSuccessToast } from "@/hooks/useApiSuccessToast";
@@ -24,7 +24,6 @@ interface QualifyConditionStandaloneFormProps {
   onSubmit: (data: RewardQualifyConditionFormData) => Promise<void> | void;
   isSubmitting?: boolean;
   submitLabel?: string;
-  submittingLabel?: string;
   successMessage?: string;
   errorMessage?: string;
 }
@@ -36,9 +35,8 @@ export function QualifyConditionStandaloneForm({
   onSubmit,
   isSubmitting = false,
   submitLabel = "Guardar cambios",
-  submittingLabel = "Guardando...",
-  successMessage = "Condicion de calificacion actualizada.",
-  errorMessage = "No se pudo actualizar la condicion de calificacion.",
+  successMessage = "Condición de calificación actualizada.",
+  errorMessage = "No se pudo actualizar la condición de calificación.",
 }: QualifyConditionStandaloneFormProps) {
   const form = useQualifyConditionForm(initialData);
   const { formRef, validationBannerRef, focusFirstInvalidField } =
@@ -47,6 +45,7 @@ export function QualifyConditionStandaloneForm({
   const { notifySuccess } = useApiSuccessToast();
   const p = (value: Path<RewardQualifyConditionFormData>) => value;
   const paths = buildQualifyConditionStandalonePaths(p);
+  const primaryLinkedReward = initialData?.linkedRewards?.[0];
 
   const { anchorCatalog, anchorOccurrences } = useQualifyConditionStandaloneLogic(
     {
@@ -70,7 +69,7 @@ export function QualifyConditionStandaloneForm({
       <form
         ref={formRef}
         onSubmit={form.handleSubmit(handleSubmit, focusFirstInvalidField)}
-        className="space-y-6"
+        className="space-y-6 pb-24"
       >
         <ValidationErrorBanner<RewardQualifyConditionFormData>
           errors={form.formState.errors}
@@ -95,11 +94,20 @@ export function QualifyConditionStandaloneForm({
           anchorOccurrences={anchorOccurrences}
           promotionTimeframe={promotionData?.timeframe}
           promotion={promotionData ?? null}
+          rewardStatus={primaryLinkedReward?.status}
+          promotionStatus={primaryLinkedReward?.promotionStatus}
+          phaseStatus={primaryLinkedReward?.phaseStatus}
         />
 
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? submittingLabel : submitLabel}
-        </Button>
+        <FormActionBar
+          onDiscard={() => form.reset()}
+          isLoading={isSubmitting}
+          showBackButton
+          backHref="/qualify-conditions"
+          backToLabel="Volver a condiciones"
+          saveLabel={submitLabel}
+          discardLabel="Descartar"
+        />
       </form>
     </FormProvider>
   );

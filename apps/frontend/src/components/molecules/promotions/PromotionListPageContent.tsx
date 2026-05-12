@@ -134,7 +134,7 @@ function getPromotionPhaseSummary(promotionName: string, phaseName: string, phas
 function getPromotionRewardQualifySummary(reward: RewardEntity) {
   if (reward.qualifyConditions.length === 0) {
     return {
-      primary: "Sin QC",
+      primary: "Sin condiciones",
       secondary: "No requiere calificación",
     };
   }
@@ -202,7 +202,7 @@ function PromotionExpandedPanel({ promotion }: { promotion: PromotionEntity }) {
   if (rewardRows.length === 0) {
     return (
       <div className="text-muted-foreground px-1 py-1 text-[13px]">
-        Esta promoción todavía no tiene rewards persistidas.
+        Esta promoción todavía no tiene recompensas persistidas.
       </div>
     );
   }
@@ -210,7 +210,7 @@ function PromotionExpandedPanel({ promotion }: { promotion: PromotionEntity }) {
   return (
     <div className="space-y-1.5">
       <div className="text-muted-foreground px-0.5 text-[11px] font-medium tracking-[0.03em]">
-        Rewards de la promoción
+        Recompensas de la promoción
       </div>
       <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
         <div className="overflow-x-auto">
@@ -317,8 +317,8 @@ function PromotionExpandedPanel({ promotion }: { promotion: PromotionEntity }) {
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      title="Abrir reward"
-                      aria-label="Abrir reward"
+                      title="Abrir recompensa"
+                      aria-label="Abrir recompensa"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -392,13 +392,13 @@ export default function PromotionListPageContent() {
               }}
               aria-label={
                 row.getIsExpanded()
-                  ? "Ocultar rewards de la promoción"
-                  : "Ver rewards de la promoción"
+                  ? "Ocultar recompensas de la promoción"
+                  : "Ver recompensas de la promoción"
               }
               title={
                 row.getIsExpanded()
-                  ? "Ocultar rewards de la promoción"
-                  : "Ver rewards de la promoción"
+                  ? "Ocultar recompensas de la promoción"
+                  : "Ver recompensas de la promoción"
               }
             >
               {row.getIsExpanded() ? (
@@ -428,14 +428,17 @@ export default function PromotionListPageContent() {
         accessorKey: "timeframeEnd",
         header: "Fin",
         enableSorting: true,
-        cell: ({ row }) => (
-          <div
-            className="min-w-[104px] tabular-nums whitespace-nowrap"
-            title={row.original.timeframeEnd ? formatDate(row.original.timeframeEnd) : "Sin resolver"}
-          >
-            {row.original.timeframeEnd ? formatDate(row.original.timeframeEnd) : "Sin resolver"}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const label = row.original.timeframeEnd
+            ? formatDate(row.original.timeframeEnd)
+            : "Sin fecha de fin";
+
+          return (
+            <div className="min-w-[104px] tabular-nums whitespace-nowrap" title={label}>
+              {label}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "name",
@@ -480,7 +483,7 @@ export default function PromotionListPageContent() {
       },
       {
         id: "rewardsCount",
-        header: "Rewards",
+        header: "Recompensas",
         enableSorting: false,
         cell: ({ row }) => (
           <div className="text-center font-medium tabular-nums">
@@ -582,7 +585,7 @@ export default function PromotionListPageContent() {
       <PageHeader
         eyebrow="Promociones"
         title="Promociones"
-        description="Vista operativa de promociones persistidas para comparar estado, rewards, actividad, stake real, balance y yield antes de entrar en detalle."
+        description="Vista operativa de promociones persistidas para comparar estado, recompensas, actividad, stake real, balance y yield antes de entrar en detalle."
         actions={
           <Link href="/promotions/new">
             <Button>

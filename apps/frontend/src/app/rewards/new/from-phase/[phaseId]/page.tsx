@@ -8,11 +8,12 @@ import { RewardCreateForm } from "@/components/organisms/RewardStandaloneForm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DetailGrid, DetailRow } from "@/components/ui/detail-grid";
+import { PageHeader } from "@/components/ui/page-header";
 import { usePromotion } from "@/hooks/api/usePromotions";
 
 export default function RewardCreateFromPhasePage() {
@@ -34,7 +35,7 @@ export default function RewardCreateFromPhasePage() {
         </Link>
         <Card>
           <CardHeader>
-            <CardTitle>No se puede crear la reward</CardTitle>
+            <CardTitle>No se puede crear la recompensa</CardTitle>
             <CardDescription>
               Falta el contexto de promoción. Abre esta acción desde el detalle
               de una promoción o una fase.
@@ -47,47 +48,30 @@ export default function RewardCreateFromPhasePage() {
 
   return (
     <div className="container mx-auto space-y-6 p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Rewards
-          </p>
-          <h1 className="text-2xl font-semibold">Nueva reward</h1>
-          <p className="text-sm text-muted-foreground">
-            Crea la reward dentro de una fase existente. Las qualify conditions
-            se añaden después desde el detalle de la reward.
-          </p>
-        </div>
-        <Link href={`/promotions/${promotionId}`}>
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver a promoción
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Recompensas"
+        title="Nueva recompensa"
+        description="Crea la recompensa dentro de una fase existente. Las condiciones de calificación se añaden después desde el detalle de la recompensa."
+        actions={
+          <Link href={`/promotions/${promotionId}`}>
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver a promoción
+            </Button>
+          </Link>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Contexto</CardTitle>
-          <CardDescription>
-            La reward quedará asociada a esta promoción y fase.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
-          <div>
-            <p className="font-medium">Promoción</p>
-            <p className="text-muted-foreground">
-              {promotion?.name ?? "Cargando promoción..."}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Fase</p>
-            <p className="text-muted-foreground">
-              {phase?.name ?? phaseId}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Contexto</h2>
+        <DetailGrid className="rounded-md border bg-card p-4">
+          <DetailRow
+            label="Promoción"
+            value={promotion?.name ?? "Cargando promoción..."}
+          />
+          <DetailRow label="Fase" value={phase?.name ?? phaseId} />
+        </DetailGrid>
+      </section>
 
       <RewardCreateForm promotionId={promotionId} phaseId={phaseId} />
     </div>

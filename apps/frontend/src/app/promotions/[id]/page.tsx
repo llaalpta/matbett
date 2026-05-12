@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/atoms/ConfirmDialog";
 import { CenteredErrorState } from "@/components/feedback";
 import { PromotionForm } from "@/components/organisms/PromotionForm";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   useDeletePromotion,
   usePromotion,
@@ -28,7 +29,6 @@ export default function PromotionEditPage() {
   const deletePromotion = useDeletePromotion();
   const { apiErrorMessage, clearApiError, setApiError } = useApiErrorMessage();
   const { notifySuccess } = useApiSuccessToast();
-  const firstPhase = promotion?.phases[0];
 
   const handleSubmit = async (data: PromotionFormData) => {
     clearApiError();
@@ -79,38 +79,29 @@ export default function PromotionEditPage() {
 
   return (
     <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Actualizar promocion</h1>
-          <p className="mt-1 text-muted-foreground">
-            {promotion.name}
-            {promotion.description ? ` - ${promotion.description}` : ""}
-          </p>
-        </div>
-        <Link href="/promotions">
-          <Button variant="outline">Volver</Button>
-        </Link>
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        {firstPhase ? (
-          <Link
-            href={`/rewards/new/from-phase/${firstPhase.id}?promotionId=${promotionId}`}
-          >
-            <Button type="button" variant="outline">
-              Añadir reward
+      <PageHeader
+        eyebrow="Promociones"
+        title="Actualizar promoción"
+        description={`${promotion.name}${promotion.description ? ` - ${promotion.description}` : ""}`}
+        actions={
+          <>
+            <Link href="/promotions">
+              <Button variant="outline" size="sm">
+                Volver a promociones
+              </Button>
+            </Link>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={deletePromotion.isPending}
+            >
+              Eliminar promoción
             </Button>
-          </Link>
-        ) : null}
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={() => setShowDeleteDialog(true)}
-          disabled={deletePromotion.isPending}
-        >
-          Eliminar promocion
-        </Button>
-      </div>
+          </>
+        }
+      />
 
       <PromotionForm
         initialData={promotion}

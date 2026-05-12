@@ -141,6 +141,7 @@ export class BetService implements IBetService {
     input: RegisterBetsBatch,
   ): Promise<BetRegistrationBatch> {
     const validated = RegisterBetsBatchSchema.parse(input);
+    validateCreateCalculationTargetContributes(validated);
 
     return prisma.$transaction(async (tx) => {
       const references = await this.resolveReferences(tx, userId, validated.legs);
@@ -191,6 +192,7 @@ export class BetService implements IBetService {
     input: UpdateBetsBatch,
   ): Promise<BetRegistrationBatch> {
     const validated = UpdateBetsBatchSchema.parse(input);
+    validateUpdateCalculationTargetContributes(validated);
 
     return prisma.$transaction(async (tx) => {
       const existing = await this.repository.findBatchByIdForUser(batchId, userId, tx);
@@ -759,14 +761,18 @@ export class BetService implements IBetService {
     }
 
     if (target.participationId) {
-      const exists = finalBatch.bets.some((bet) =>
-        bet.participations.some((participation) => participation.id === target.participationId),
-      );
+      const targetParticipation = finalBatch.bets
+        .flatMap((bet) => bet.participations)
+        .find((participation) => participation.id === target.participationId);
 
-      if (!exists) {
+      if (!targetParticipation) {
         throw new BadRequestError(
           `Target participationId ${target.participationId} does not exist in the final batch.`,
         );
+      }
+
+      if (!targetParticipation.contributesToTracking) {
+        throw new BadRequestError('Target participation must contribute to tracking.');
       }
 
       return target.participationId;
@@ -930,6 +936,36 @@ function isPersistedParticipationKey(participationKey: string) {
 
 function extractPersistedParticipationId(participationKey: string) {
   return participationKey.slice(persistedParticipationPrefix.length);
+}
+
+function validateCreateCalculationTargetContributes(input: RegisterBetsBatch) {
+  const targetKey = input.calculation.target?.participationKey;
+  if (!targetKey) {
+    return;
+  }
+
+  const targetParticipation = input.legs
+    .flatMap((leg) => leg.participations)
+    .find((participation) => participation.participationKey === targetKey);
+
+  if (!targetParticipation?.contributesToTracking) {
+    throw new BadRequestError('Target participation must contribute to tracking.');
+  }
+}
+
+function validateUpdateCalculationTargetContributes(input: UpdateBetsBatch) {
+  const targetKey = input.calculation.target?.participationKey;
+  if (!targetKey) {
+    return;
+  }
+
+  const targetParticipation = input.legs
+    .flatMap((leg) => leg.participations)
+    .find((participation) => participation.participationKey === targetKey);
+
+  if (!targetParticipation?.contributesToTracking) {
+    throw new BadRequestError('Target participation must contribute to tracking.');
+  }
 }
 
 function buildBatchWhereInput(input: BetBatchListInput): Prisma.BetRegistrationBatchWhereInput {

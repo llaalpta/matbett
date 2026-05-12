@@ -28,6 +28,7 @@ export function BetLegAdjustmentSection({
             <Button
               key={option.value}
               type="button"
+              size="sm"
               variant={isActive ? "default" : "outline"}
               onClick={() => onValueChange(isActive ? undefined : option.value)}
             >

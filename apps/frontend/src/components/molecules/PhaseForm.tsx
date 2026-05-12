@@ -1,22 +1,18 @@
 "use client";
 
-import { activationMethodOptions, rewardTypeOptions, getLabel, type AnchorCatalog, type AnchorOccurrences } from "@matbett/shared";
+import { activationMethodOptions, type AnchorCatalog, type AnchorOccurrences } from "@matbett/shared";
 import { Trash2 } from "lucide-react";
-import React, { useCallback, useState } from "react";
+import React from "react";
 
 import {
   TypographyH3,
   TypographyH4,
-  TypographyP,
-  TypographyMuted,
 } from "@/components/atoms";
 import { InputField } from "@/components/atoms/InputField";
 import { SelectField } from "@/components/atoms/SelectField";
 import { TextareaField } from "@/components/atoms/TextareaField";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePhaseAccessLogic } from "@/hooks/domain/promotions/usePhaseAccessLogic";
 import { usePhaseLogic } from "@/hooks/domain/promotions/usePhaseLogic";
@@ -24,7 +20,7 @@ import type { PromotionFormData, PhaseServerModel } from "@/types/hooks";
 
 import { DateTimeField } from "../atoms";
 
-import { RewardForm } from "./RewardForm";
+import { PhaseRewardsTable } from "./promotions/PhaseRewardsTable";
 import { TimeframeForm } from "./TimeframeForm";
 
 interface PhaseFormProps {
@@ -32,18 +28,10 @@ interface PhaseFormProps {
   onRemove?: () => void;
   removeDisabledReason?: string;
   isSimplified?: boolean;
-  isEditing?: boolean;
-  // Props explícitas para tracking
-  onRewardSelect?: (id: string, index: number) => void;
-  onQualifyConditionSelect?: (id: string, index: number) => void;
-  availableQualifyConditions?: Array<{
-    id: string;
-    type: string;
-    description?: string | null;
-  }>;
   anchorCatalog?: AnchorCatalog;
   anchorOccurrences?: AnchorOccurrences;
   phaseServerData?: PhaseServerModel; // Datos del servidor para esta fase
+  promotionId?: string;
 }
 
 export const PhaseForm: React.FC<PhaseFormProps> = ({
@@ -51,27 +39,13 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
   onRemove,
   removeDisabledReason,
   isSimplified = false,
-  isEditing = false,
-  onRewardSelect,
-  onQualifyConditionSelect,
-  availableQualifyConditions,
   anchorCatalog,
   anchorOccurrences,
   phaseServerData,
+  promotionId,
 }) => {
-  const isPersistedReward = (rewardIndex: number) =>
-    typeof rewardsValues?.[rewardIndex]?.id === "string" &&
-    rewardsValues[rewardIndex].id.length > 0;
-
   const {
-    rewardsFieldArray,
     rewardsValues,
-    addReward,
-    removeReward,
-    canRemoveReward,
-    getRewardRemoveDisabledReason,
-    getRewardIdByIndex,
-    getRewardFieldPath,
     promotionStatus,
     promotionTimeframe,
     phaseStatusValue,
@@ -97,167 +71,24 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
     anchorOccurrences,
     rewards: rewardsValues,
   });
-  const [rewardTabIndex, setRewardTabIndex] = useState(0);
-  const activeRewardTabIndex = Math.min(
-    rewardTabIndex,
-    Math.max(rewardsFieldArray.fields.length - 1, 0)
+  const rewards = phaseServerData?.rewards ?? [];
+  const canAddReward =
+    Boolean(promotionId && phaseServerData?.id) && phaseAccess.isStructureEditable;
+  const addRewardDisabledReason =
+    !phaseServerData?.id
+      ? "Guarda la promoción primero para añadir recompensas a esta fase."
+      : phaseAccess.structureLockedReason;
+
+  const renderRewardsSection = () => (
+    <PhaseRewardsTable
+      rewards={rewards}
+      phaseId={phaseServerData?.id}
+      promotionId={promotionId}
+      canAddReward={canAddReward}
+      addRewardDisabledReason={addRewardDisabledReason}
+    />
   );
 
-  const handleRemoveReward = useCallback(
-    (rewardIndex: number) => {
-      setRewardTabIndex((current) => {
-        const nextLength = rewardsFieldArray.fields.length - 1;
-        if (nextLength <= 0) {
-          return 0;
-        }
-        if (rewardIndex < current) {
-          return current - 1;
-        }
-        if (rewardIndex === current) {
-          return Math.min(current, nextLength - 1);
-        }
-        return current;
-      });
-      removeReward(rewardIndex);
-    },
-    [removeReward, rewardsFieldArray.fields.length]
-  );
-
-  const handleRewardTabChange = useCallback(
-    (value: string) => {
-      const rewardIndex = Number.parseInt(value, 10);
-      if (Number.isNaN(rewardIndex)) {
-        return;
-      }
-      setRewardTabIndex(rewardIndex);
-      if (!onRewardSelect) {
-        return;
-      }
-      const rewardId = getRewardIdByIndex(rewardIndex);
-      if (!rewardId) {
-        return;
-      }
-      onRewardSelect(rewardId, rewardIndex);
-    },
-    [getRewardIdByIndex, onRewardSelect]
-  );
-
-  // Helper para renderizar RewardForm (DRY)
-  const renderRewardForm = (index: number) => {
-    const rewardPath = getRewardFieldPath(index);
-    const rewardRemoveDisabledReason = getRewardRemoveDisabledReason(index);
-    const canRemoveCurrentReward = canRemoveReward(index, isSimplified);
-
-    return (
-      <RewardForm
-        fieldPath={rewardPath}
-        onRemove={() => handleRemoveReward(index)}
-        canRemove={canRemoveCurrentReward}
-        removeDisabledReason={rewardRemoveDisabledReason}
-        isEditing={isEditing}
-        onQualifyConditionSelect={onQualifyConditionSelect}
-        availableQualifyConditions={availableQualifyConditions}
-        anchorCatalog={anchorCatalog}
-        anchorOccurrences={anchorOccurrences}
-        rewardServerData={phaseServerData?.rewards?.[index]} // Pasar datos del servidor en cascada
-      />
-    );
-  };
-
-  // --- RENDERIZADO (MODO SIMPLIFICADO / FASE ÚNICA) ---
-  if (isSimplified) {
-    return (
-      <div className="space-y-4">
-        {phaseAccess.warnings.length > 0 ? (
-          <Alert className="border-amber-300 bg-amber-50/70 text-amber-900">
-            <AlertDescription className="space-y-1 text-amber-900">
-              {phaseAccess.warnings.map((warning) => (
-                <div key={warning}>{warning}</div>
-              ))}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {!phaseAccess.isStructureEditable && phaseAccess.structureLockedReason ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            {phaseAccess.structureLockedReason}
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col items-start gap-1">
-            <TypographyH4>Recompensas</TypographyH4>
-            <span className="text-sm text-muted-foreground font-normal">
-              {rewardsFieldArray.fields.length === 1 &&
-                `${rewardsFieldArray.fields.length} recompensa configurada`}
-              {rewardsFieldArray.fields.length > 1 &&
-                `${rewardsFieldArray.fields.length} recompensas configuradas`}
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => addReward("FREEBET")}
-            disabled={!phaseAccess.isStructureEditable}
-            title={phaseAccess.structureLockedReason}
-          >
-            + Añadir Recompensa
-          </Button>
-        </div>
-
-        {rewardsFieldArray.fields.length === 0 ? (
-          <div className="py-8 text-center text-gray-500">
-            <TypographyP>No hay recompensas configuradas.</TypographyP>
-            <TypographyMuted>
-              Añade al menos una recompensa para continuar.
-            </TypographyMuted>
-          </div>
-        ) : rewardsFieldArray.fields.length === 1 ? (
-          // Si solo hay una recompensa, mostrarla directamente sin tabs
-          renderRewardForm(0)
-        ) : (
-          // Si hay más de una recompensa, mostrar con tabs
-          <Tabs
-            value={activeRewardTabIndex.toString()}
-            onValueChange={handleRewardTabChange}
-          >
-            <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
-              {rewardsFieldArray.fields.map((_, rewardIndex) => {
-                const rewardType = rewardsValues?.[rewardIndex]?.type ?? "FREEBET";
-                const label = getLabel(rewardTypeOptions, rewardType);
-                return (
-                  <TabsTrigger key={rewardIndex} value={rewardIndex.toString()}>
-                    <span className="flex flex-wrap items-center justify-center gap-2">
-                      <span>{label} ({rewardIndex + 1})</span>
-                      <Badge
-                        variant={isPersistedReward(rewardIndex) ? "outline" : "secondary"}
-                        className={
-                          isPersistedReward(rewardIndex)
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                            : "bg-amber-100 text-amber-800"
-                        }
-                      >
-                        {isPersistedReward(rewardIndex) ? "Guardada" : "Nueva"}
-                      </Badge>
-                    </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-
-            {rewardsFieldArray.fields.map((field, rewardIndex) => (
-              <TabsContent key={field.id} value={rewardIndex.toString()}>
-                {renderRewardForm(rewardIndex)}
-              </TabsContent>
-            ))}
-          </Tabs>
-        )}
-      </div>
-    );
-  }
-
-  // --- RENDERIZADO (MODO COMPLETO / MÚLTIPLES FASES) ---
   return (
     <div className="space-y-4">
       {phaseAccess.warnings.length > 0 ? (
@@ -276,7 +107,8 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between">
+      {!isSimplified ? (
+        <div className="flex items-center justify-between">
         <TypographyH3>
           {`Fase ${phaseIndex + 1}`}
         </TypographyH3>
@@ -311,7 +143,10 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
             ) : null}
           </Tooltip>
         ) : null}
-      </div>
+        </div>
+      ) : (
+        <TypographyH3>Fase principal</TypographyH3>
+      )}
 
       <fieldset disabled={!phaseAccess.isStructureEditable} className="space-y-4">
         <TypographyH4>Información básica</TypographyH4>
@@ -363,62 +198,7 @@ export const PhaseForm: React.FC<PhaseFormProps> = ({
       </fieldset>
 
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <TypographyH4>Recompensas</TypographyH4>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => addReward("FREEBET")}
-            disabled={!phaseAccess.isStructureEditable}
-            title={phaseAccess.structureLockedReason}
-          >
-            + Añadir Recompensa
-          </Button>
-        </div>
-        
-        {rewardsFieldArray.fields.length === 0 ? (
-            <div className="py-8 text-center text-gray-500">
-              <TypographyP>No hay recompensas configuradas.</TypographyP>
-            </div>
-        ) : rewardsFieldArray.fields.length === 1 ? (
-            renderRewardForm(0)
-        ) : (
-            <Tabs
-              value={activeRewardTabIndex.toString()}
-              onValueChange={handleRewardTabChange}
-            >
-              <TabsList className="flex h-auto w-full flex-wrap gap-1 md:grid md:grid-cols-[repeat(auto-fit,minmax(100px,1fr))]">
-                {rewardsFieldArray.fields.map((_, rewardIndex) => {
-                  const rewardType = rewardsValues?.[rewardIndex]?.type ?? "FREEBET";
-                  const label = getLabel(rewardTypeOptions, rewardType);
-                  return (
-                    <TabsTrigger key={rewardIndex} value={rewardIndex.toString()}>
-                      <span className="flex flex-wrap items-center justify-center gap-2">
-                        <span>{label} {rewardIndex + 1}</span>
-                        <Badge
-                          variant={isPersistedReward(rewardIndex) ? "outline" : "secondary"}
-                          className={
-                            isPersistedReward(rewardIndex)
-                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                              : "bg-amber-100 text-amber-800"
-                          }
-                        >
-                          {isPersistedReward(rewardIndex) ? "Guardada" : "Nueva"}
-                        </Badge>
-                      </span>
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-
-              {rewardsFieldArray.fields.map((field, rewardIndex) => (
-                <TabsContent key={field.id} value={rewardIndex.toString()}>
-                  {renderRewardForm(rewardIndex)}
-                </TabsContent>
-              ))}
-            </Tabs>
-        )}
+        {renderRewardsSection()}
       </div>
     </div>
   );

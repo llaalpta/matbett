@@ -181,8 +181,8 @@ export function BetTrackingTable({
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      title="Abrir batch"
-                      aria-label="Abrir batch"
+                      title="Ver operación"
+                      aria-label="Ver operación"
                     >
                       <Eye className="h-4 w-4" aria-hidden="true" />
                     </Button>

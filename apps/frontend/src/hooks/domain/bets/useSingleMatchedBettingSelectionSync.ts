@@ -15,24 +15,28 @@ function deriveOpposedSelectionLabel(selection?: string) {
   return `En contra de ${normalizedSelection}`;
 }
 
-function isSingleMatchedBettingLayout(strategy: BetBatchFormValues["strategy"]) {
+function isSingleMatchedBettingLayout(
+  operation: BetBatchFormValues["operation"],
+  strategy: BetBatchFormValues["strategy"]
+) {
   return (
     strategy.kind === "HEDGE" &&
     strategy.strategyType === "MATCHED_BETTING" &&
-    strategy.lineMode === "SINGLE"
+    operation.lineMode === "SINGLE"
   );
 }
 
 export function useSingleMatchedBettingSelectionSync(
 ) {
   const form = useFormContext<BetBatchFormValues>();
+  const operation = useWatch({ control: form.control, name: "operation" });
   const strategy = useWatch({ control: form.control, name: "strategy" });
   const watchedLegs = useWatch({ control: form.control, name: "legs" });
   const legs = useMemo(() => watchedLegs ?? [], [watchedLegs]);
   const mainSelection =
     legs.find((candidate) => candidate.legRole === "MAIN")?.selections?.[0]
       ?.selection ?? "";
-  const isSingleMatchedLayout = isSingleMatchedBettingLayout(strategy);
+  const isSingleMatchedLayout = isSingleMatchedBettingLayout(operation, strategy);
   const derivedHedge1Selection = deriveOpposedSelectionLabel(mainSelection);
 
   useEffect(() => {
